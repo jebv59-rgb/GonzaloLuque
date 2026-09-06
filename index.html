@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Willy Luque — Dashboard Comercial</title>
+<meta name="description" content="Willy Luque — Supervisor de Ventas en RIMSA S.A. Dashboard editable con mi experiencia, herramientas y proyectos comerciales.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23eb6834'/%3E%3Ctext x='50' y='68' font-size='52' font-family='monospace' font-weight='700' fill='%23fff' text-anchor='middle'%3EW%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+  <div class="container">
+    <a href="#top" class="nav-brand">
+      <span class="mark">▦</span>
+      <span>
+        <span id="brandName">Willy Luque</span>
+        <span class="nav-subtitle">Comercial · Dashboards · San Francisco, Córdoba</span>
+      </span>
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="#sobre-mi">Sobre mí</a>
+      <a href="#experiencia">Experiencia</a>
+      <a href="#proyectos">Proyectos</a>
+      <a href="#skills">Skills</a>
+      <a href="#contacto">Contacto</a>
+    </div>
+    <div class="nav-right">
+      <span class="nav-date" id="navDate">Actualizado: —</span>
+      <button class="btn btn-sm btn-admin" id="adminToggleBtn" type="button">🔒 Modo admin</button>
+      <button class="nav-toggle" id="navToggle" aria-label="Menú" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ ADMIN TOOLBAR (oculta hasta login) ============ -->
+<div class="admin-bar" id="adminBar" hidden>
+  <div class="container admin-bar-inner">
+    <span class="admin-pill">✏️ Modo administrador — estás editando tu propia copia (no publicada aún)</span>
+    <div class="admin-bar-actions">
+      <button class="btn btn-sm btn-ghost-light" id="discardBtn" type="button">Descartar cambios</button>
+      <button class="btn btn-sm btn-primary" id="publishBtn" type="button">⬇ Publicar (descargar data.js)</button>
+      <button class="btn btn-sm btn-ghost-light" id="exitAdminBtn" type="button">Salir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ LOGIN MODAL ============ -->
+<div class="modal-overlay" id="loginOverlay" hidden>
+  <div class="modal">
+    <h3>Ingresar como administrador</h3>
+    <p>Esto solo desbloquea la edición en tu navegador — no es un login real. Cualquiera que vea el código fuente puede ver la contraseña. No cargues acá datos que necesiten seguridad de verdad.</p>
+    <input type="password" id="passwordInput" placeholder="Contraseña" autocomplete="off">
+    <p class="modal-error" id="loginError" hidden>Contraseña incorrecta.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" id="cancelLoginBtn" type="button">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="confirmLoginBtn" type="button">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow" id="heroLocation">San Francisco, Córdoba, Argentina</div>
+        <h1 id="heroName">Willy Luque</h1>
+        <div class="hero-role mono">
+          <span id="heroRole1">Supervisor de Ventas @ RIMSA S.A.</span>
+          <span class="sep">·</span>
+          <span id="heroRole2">Referente de Sistemas, Red Activa 2026</span>
+        </div>
+        <p class="hero-lead" id="heroLead">Convierto planillas de ventas en dashboards que todo un equipo realmente usa.</p>
+        <div class="hero-actions">
+          <a href="#proyectos" class="btn btn-primary">Ver proyectos</a>
+          <a href="#contacto" class="btn btn-ghost">Contactar</a>
+        </div>
+        <div class="hero-stats" id="statsRow"></div>
+      </div>
+      <div>
+        <div class="avatar-panel">
+          <div class="avatar-core">
+            <span class="initials">WL</span>
+            <span class="tag mono" id="heroFullName">GONZALO ARIEL LUQUE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ SOBRE MI ============ -->
+<section id="sobre-mi" data-section-key="about">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Sobre mí</div>
+      <h2>Primero el mostrador, después el dashboard</h2>
+    </div>
+    <div class="about-grid">
+      <div id="aboutParagraphs"></div>
+      <div class="about-card">
+        <h3 class="mono">// lo que hago en el día a día</h3>
+        <ul class="role-list" id="aboutHighlights"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXPERIENCIA ============ -->
+<section id="experiencia" class="alt-surface" data-section-key="experience">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Experiencia</div>
+      <h2>17 años del lado comercial del consumo masivo</h2>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</section>
+
+<!-- ============ PROYECTOS ============ -->
+<section id="proyectos" data-section-key="projects">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Proyectos</div>
+      <h2>Herramientas hechas para resolver un problema real, cada una</h2>
+      <p>Vista previa ilustrativa — las capturas reales se suman próximamente.</p>
+    </div>
+    <div class="projects-grid" id="projectsGrid"></div>
+    <button class="btn btn-ghost btn-sm admin-only" id="addProjectBtn" type="button" hidden>+ Agregar proyecto</button>
+  </div>
+</section>
+
+<!-- ============ SKILLS ============ -->
+<section id="skills" class="alt-surface" data-section-key="skills">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Herramientas</div>
+      <h2>Autodidacta, con oficio de vendedor primero</h2>
+    </div>
+    <div class="skills-grid">
+      <div>
+        <div id="skillBars"></div>
+        <p style="margin-top:18px;font-size:13px">Autoevaluación personal. La barra refleja el nivel cargado.</p>
+      </div>
+      <div class="about-card">
+        <h3 class="mono">// con las manos en</h3>
+        <div class="chips" id="skillChips"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EDU / IDIOMAS ============ -->
+<section id="educacion" data-section-key="education">
+  <div class="container">
+    <div class="split-grid">
+      <div class="info-card">
+        <h3><span class="ico(�🎓</span><span>Educación</span></h3>
+        <div id="eduList"></div>
+      </div>
+      <div class="info-card">
+        <h3><span class="ico">🌐</span><span>Idiomas</span></h3>
+        <div id="langList"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONTACTO ============ -->
+<section id="contacto" data-section-key="contact">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Hablemos</div>
+      <h2>Abierto a nuevos desafíos comerciales y de sistemas</h2>
+    </div>
+    <div class="contact-panel">
+      <p style="font-size:17px;color:var(--ink-secondary)">Ya sea un dashboard que tu equipo necesita, una posición comercial, o simplemente charlar de datos y ventas — escribime.</p>
+      <div class="contact-links" id="contactLinks"></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>© <span id="year"></span> <span id="footerName">Willy Luque</span> · <span id="footerLocation">San Francisco, Córdoba, Argentina</span></p>
+    <div class="footer-links">
+      <a href="#top">Volver arriba</a>
+    </div>
+  </div>
+</footer>
+
+<template id="tpl-visibility-toggle">
+  <label class="vis-toggle admin-only" hidden>
+    <input type="checkbox" checked>
+    <span class="vis-slider"></span>
+    <span class="vis-label">visible</span>
+  </label>
+</template>
+
+<script src="js/data.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
