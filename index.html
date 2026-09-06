@@ -83,12 +83,30 @@
         </div>
         <div class="hero-stats" id="statsRow"></div>
       </div>
-      <div>
-        <div class="avatar-panel">
-          <div class="avatar-core">
-            <span class="initials">WL</span>
-            <span class="tag mono" id="heroFullName">GONZALO ARIEL LUQUE</span>
+      <div class="profile-card">
+        <div class="avatar-panel" id="avatarPanel">
+          <div class="avatar-core" id="avatarCore">
+            <span class="initials" id="avatarInitials">WL</span>
           </div>
+          <img class="avatar-photo" id="avatarPhoto" alt="Foto de perfil" hidden>
+        </div>
+        <div class="avatar-tag-row">
+          <span class="tag mono" id="heroFullName">GONZALO ARIEL LUQUE</span>
+        </div>
+        <div class="photo-actions admin-only">
+          <button type="button" class="btn btn-sm btn-ghost" id="choosePhotoBtn">📷 Cambiar foto</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="removePhotoBtn">Quitar foto</button>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+        </div>
+
+        <div class="mini-contact-card">
+          <h3 class="mono">// contacto rápido</h3>
+          <div id="miniContact"></div>
+        </div>
+
+        <div class="mini-contact-card">
+          <h3 class="mono">// referencias</h3>
+          <div id="referencesList"></div>
         </div>
       </div>
     </div>
@@ -161,7 +179,7 @@
   <div class="container">
     <div class="split-grid">
       <div class="info-card">
-        <h3><span class="ico(�🎓</span><span>Educación</span></h3>
+        <h3><span class="ico">🎓</span><span>Educación</span></h3>
         <div id="eduList"></div>
       </div>
       <div class="info-card">
