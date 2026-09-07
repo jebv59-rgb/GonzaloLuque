@@ -212,7 +212,7 @@ window.SITE_DATA = {
 
   contact: {
     email: { value: "jebv59@gmail.com", visible: true },
-    phone: { value: "Agregá tu teléfono", visible: true },
+    phone: { value: "+54 9 3425 56-3664", visible: true },
     github: { value: "github.com/willyluque", url: "https://github.com/willyluque", visible: true },
     instagram: { value: "@willyluque", url: "https://www.instagram.com/willyluque", visible: true },
     location: { value: "San Francisco, Córdoba, Argentina", visible: true }

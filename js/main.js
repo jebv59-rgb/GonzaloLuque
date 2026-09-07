@@ -43,6 +43,14 @@
     };
     reader.readAsDataURL(file);
   }
+  // arma un link de wa.me a partir de cualquier texto de teléfono (usa +54 9 de Argentina si no lo tiene puesto)
+  function waLink(value) {
+    var digits = (value || "").replace(/\D/g, "");
+    if (!digits) return "https://wa.me/";
+    if (digits.slice(0, 2) !== "54") digits = "54" + digits;
+    if (digits.slice(0, 3) !== "549") digits = "549" + digits.slice(2);
+    return "https://wa.me/" + digits;
+  }
   function el(tag, cls, children) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -549,8 +557,25 @@
       return row;
     }
 
+    // fila derivada (no editable): usa el mismo teléfono de arriba pero como link directo a WhatsApp
+    function whatsappRow() {
+      var phone = data.contact.phone;
+      var visible = phone.visible !== false;
+      var row = el("a", "contact-link" + (visible ? "" : " is-hidden-item"));
+      row.href = waLink(phone.value);
+      row.target = "_blank"; row.rel = "noopener";
+      row.appendChild(el("span", "ico", ["💬"]));
+      var mid = el("span");
+      mid.appendChild(el("span", "label", ["WhatsApp"]));
+      mid.appendChild(el("span", "value", [phone.value]));
+      row.appendChild(mid);
+      if (isAdmin) row.addEventListener("click", function (ev) { ev.preventDefault(); });
+      return row;
+    }
+
     wrap.appendChild(contactRow("✉️", data.contact.email, "mailto:", "Email", "miniEmailValue"));
-    wrap.appendChild(contactRow("📞", data.contact.phone, "tel:", "Teléfono", "miniPhoneValue"));
+    wrap.appendChild(contactRow("📞", data.contact.phone, "tel:", "Llamada", "miniPhoneValue"));
+    wrap.appendChild(whatsappRow());
     wrap.appendChild(contactRow("💻", data.contact.github, "", "GitHub"));
     wrap.appendChild(contactRow("📷", data.contact.instagram, "", "Instagram"));
     wrap.appendChild(contactRow("📍", data.contact.location, "", "Ubicación", "miniLocationValue"));
@@ -563,18 +588,25 @@
     if (!wrap) return;
     wrap.innerHTML = "";
 
-    function miniRow(icon, obj, valueId) {
+    // href: si se pasa, la fila es un link clickeable (mailto / tel / wa.me); displayText anula el texto mostrado
+    function miniRow(icon, obj, valueId, href, displayText) {
       var visible = obj.visible !== false;
-      var row = el("div", "mini-contact-row" + (visible ? "" : " is-hidden-item"));
+      var row = el(href ? "a" : "div", "mini-contact-row" + (visible ? "" : " is-hidden-item"));
+      if (href) {
+        row.href = href;
+        row.target = "_blank"; row.rel = "noopener";
+        if (isAdmin) row.addEventListener("click", function (ev) { ev.preventDefault(); });
+      }
       row.appendChild(el("span", "ico", [icon]));
-      var val = el("span", "value", [obj.value]);
+      var val = el("span", "value", [displayText != null ? displayText : obj.value]);
       val.id = valueId;
       row.appendChild(val);
       return row;
     }
 
-    wrap.appendChild(miniRow("✉️", data.contact.email, "miniEmailValue"));
-    wrap.appendChild(miniRow("📞", data.contact.phone, "miniPhoneValue"));
+    wrap.appendChild(miniRow("✉️", data.contact.email, "miniEmailValue", "mailto:" + data.contact.email.value));
+    wrap.appendChild(miniRow("📞", data.contact.phone, "miniPhoneValue", "tel:" + data.contact.phone.value));
+    wrap.appendChild(miniRow("💬", data.contact.phone, "miniWhatsappValue", waLink(data.contact.phone.value), "Escribime por WhatsApp"));
     wrap.appendChild(miniRow("📍", data.contact.location, "miniLocationValue"));
   }
 
