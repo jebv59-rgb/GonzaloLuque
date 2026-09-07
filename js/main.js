@@ -16,6 +16,33 @@
   /* ---------- utilidades ---------- */
   function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 9); }
+
+  // completa campos nuevos que un borrador viejo guardado en este navegador todavía no tenga
+  function ensureDataShape(d) {
+    if (!d.profile.photo) d.profile.photo = { value: "", visible: true };
+    if (!d.contact.phone) d.contact.phone = { value: "Agregá tu teléfono", visible: true };
+    if (!d.references) d.references = [];
+    return d;
+  }
+
+  // redimensiona y recorta a cuadrado una imagen elegida por el usuario, devuelve un data URL liviano
+  function resizeImageToSquareDataURL(file, maxSize, quality, callback) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var size = Math.min(img.width, img.height);
+        var sx = (img.width - size) / 2, sy = (img.height - size) / 2;
+        var canvas = document.createElement("canvas");
+        canvas.width = maxSize; canvas.height = maxSize;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, maxSize, maxSize);
+        callback(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
   function el(tag, cls, children) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -127,6 +154,23 @@
       if (isAdmin) card.appendChild(visToggle(st, renderHero));
       wrap.appendChild(card);
     });
+
+    var avatarPhoto = document.getElementById("avatarPhoto");
+    var avatarCore = document.getElementById("avatarCore");
+    var removePhotoBtn = document.getElementById("removePhotoBtn");
+    var hasPhoto = !!(data.profile.photo && data.profile.photo.value);
+    if (avatarPhoto && avatarCore) {
+      if (hasPhoto) {
+        avatarPhoto.src = data.profile.photo.value;
+        avatarPhoto.hidden = false;
+        avatarCore.hidden = true;
+      } else {
+        avatarPhoto.hidden = true;
+        avatarPhoto.removeAttribute("src");
+        avatarCore.hidden = false;
+      }
+    }
+    if (removePhotoBtn) removePhotoBtn.hidden = !hasPhoto;
   }
 
   // helper: pinta un campo {value,visible} en un nodo existente por id (sin toggle propio, para textos "core")
@@ -480,27 +524,92 @@
     var wrap = document.getElementById("contactLinks");
     wrap.innerHTML = "";
 
-    function contactRow(icon, obj, hrefPrefix, labelText) {
+    function contactRow(icon, obj, hrefPrefix, labelText, mirrorValueId) {
       var visible = obj.visible !== false;
       var row = el("a", "contact-link" + (visible ? "" : " is-hidden-item"));
       row.href = obj.url ? obj.url : (hrefPrefix || "#") + obj.value;
-      if (hrefPrefix === "mailto:" || obj.url) { row.target = obj.url ? "_blank" : ""; row.rel = "noopener"; }
+      if (hrefPrefix === "mailto:" || hrefPrefix === "tel:" || obj.url) { row.target = obj.url ? "_blank" : ""; row.rel = "noopener"; }
       row.appendChild(el("span", "ico", [icon]));
       var mid = el("span");
       mid.appendChild(el("span", "label", [labelText]));
-      mid.appendChild(editable(obj, "value", "span", "value"));
+      var valSpan = editable(obj, "value", "span", "value");
+      if (mirrorValueId) {
+        // mantiene sincronizada la tarjeta de contacto rápido mientras se edita acá
+        valSpan.addEventListener("input", function () {
+          var m = document.getElementById(mirrorValueId);
+          if (m) m.textContent = obj.value;
+        });
+      }
+      mid.appendChild(valSpan);
       row.appendChild(mid);
       if (isAdmin) {
         row.addEventListener("click", function (ev) { ev.preventDefault(); });
-        row.appendChild(visToggle(obj, renderContact));
+        row.appendChild(visToggle(obj, refreshContactViews));
       }
       return row;
     }
 
-    wrap.appendChild(contactRow("✉️", data.contact.email, "mailto:", "Email"));
+    wrap.appendChild(contactRow("✉️", data.contact.email, "mailto:", "Email", "miniEmailValue"));
+    wrap.appendChild(contactRow("📞", data.contact.phone, "tel:", "Teléfono", "miniPhoneValue"));
     wrap.appendChild(contactRow("💻", data.contact.github, "", "GitHub"));
     wrap.appendChild(contactRow("📷", data.contact.instagram, "", "Instagram"));
-    wrap.appendChild(contactRow("📍", data.contact.location, "", "Ubicación"));
+    wrap.appendChild(contactRow("📍", data.contact.location, "", "Ubicación", "miniLocationValue"));
+  }
+
+  /* ---------- render: CONTACTO RÁPIDO (tarjeta de perfil) ---------- */
+  // Espejo de solo lectura de email / teléfono / ubicación — se edita desde la sección "Contacto" de abajo.
+  function renderMiniContact() {
+    var wrap = document.getElementById("miniContact");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+
+    function miniRow(icon, obj, valueId) {
+      var visible = obj.visible !== false;
+      var row = el("div", "mini-contact-row" + (visible ? "" : " is-hidden-item"));
+      row.appendChild(el("span", "ico", [icon]));
+      var val = el("span", "value", [obj.value]);
+      val.id = valueId;
+      row.appendChild(val);
+      return row;
+    }
+
+    wrap.appendChild(miniRow("✉️", data.contact.email, "miniEmailValue"));
+    wrap.appendChild(miniRow("📞", data.contact.phone, "miniPhoneValue"));
+    wrap.appendChild(miniRow("📍", data.contact.location, "miniLocationValue"));
+  }
+
+  function refreshContactViews() {
+    renderMiniContact();
+    renderContact();
+  }
+
+  /* ---------- render: REFERENCIAS (tarjeta de perfil) ---------- */
+  function renderReferences() {
+    var wrap = document.getElementById("referencesList");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    data.references.forEach(function (ref) {
+      var row = el("div", "reference-item" + (ref.visible === false ? " is-hidden-item" : ""));
+      row.appendChild(editable(ref, "name", "b"));
+      row.appendChild(editable(ref, "role", "span", "ref-role"));
+      row.appendChild(editable(ref, "contact", "span", "ref-contact"));
+      if (isAdmin) {
+        var actions = el("div", "reference-row-actions");
+        actions.appendChild(visToggle(ref, renderReferences));
+        actions.appendChild(smallX(function () {
+          data.references = data.references.filter(function (x) { return x.id !== ref.id; });
+          scheduleSave(); renderReferences();
+        }, "Eliminar referencia"));
+        row.appendChild(actions);
+      }
+      wrap.appendChild(row);
+    });
+    if (isAdmin) {
+      wrap.appendChild(addRowBtn("+ agregar referencia", function () {
+        data.references.push({ id: uid("ref"), name: "Nombre y Apellido", role: "Cargo · Empresa", contact: "Teléfono o email", visible: true });
+        scheduleSave(); renderReferences();
+      }));
+    }
   }
 
   /* ---------- visibilidad de secciones completas ---------- */
@@ -534,7 +643,9 @@
     renderProjects();
     renderSkills();
     renderEduLang();
+    renderReferences();
     renderContact();
+    renderMiniContact();
     renderSectionToggles();
   }
 
@@ -558,7 +669,7 @@
     try { sessionStorage.setItem(SESSION_KEY, "1"); } catch (e) { /* noop */ }
     var draft = null;
     try { draft = localStorage.getItem(DRAFT_KEY); } catch (e) { /* noop */ }
-    data = draft ? JSON.parse(draft) : clone(window.SITE_DATA);
+    data = ensureDataShape(draft ? JSON.parse(draft) : clone(window.SITE_DATA));
     document.body.classList.add("admin-mode");
     adminBar.hidden = false;
     adminToggleBtn.textContent = "🔓 Salir del modo admin";
@@ -568,7 +679,7 @@
   function exitAdmin() {
     isAdmin = false;
     try { sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* noop */ }
-    data = clone(window.SITE_DATA); // los invitados siempre ven lo publicado, nunca el borrador
+    data = ensureDataShape(clone(window.SITE_DATA)); // los invitados siempre ven lo publicado, nunca el borrador
     document.body.classList.remove("admin-mode");
     adminBar.hidden = true;
     adminToggleBtn.textContent = "🔒 Modo admin";
@@ -596,7 +707,7 @@
   document.getElementById("discardBtn").addEventListener("click", function () {
     if (!confirm("¿Descartar todos los cambios sin publicar y volver a la última versión publicada?")) return;
     try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* noop */ }
-    data = clone(window.SITE_DATA);
+    data = ensureDataShape(clone(window.SITE_DATA));
     renderAll();
   });
 
@@ -644,7 +755,33 @@
   if (hadSession) {
     enterAdmin();
   } else {
-    data = clone(window.SITE_DATA);
+    data = ensureDataShape(clone(window.SITE_DATA));
     renderAll();
+  }
+
+  /* ---------- foto de perfil ---------- */
+  var photoInput = document.getElementById("photoInput");
+  var choosePhotoBtn = document.getElementById("choosePhotoBtn");
+  var removePhotoBtnEl = document.getElementById("removePhotoBtn");
+  if (choosePhotoBtn && photoInput) {
+    choosePhotoBtn.addEventListener("click", function () { photoInput.click(); });
+    photoInput.addEventListener("change", function () {
+      var file = photoInput.files && photoInput.files[0];
+      photoInput.value = "";
+      if (!file) return;
+      resizeImageToSquareDataURL(file, 480, 0.85, function (dataUrl) {
+        data.profile.photo.value = dataUrl;
+        data.profile.photo.visible = true;
+        scheduleSave();
+        renderHero();
+      });
+    });
+  }
+  if (removePhotoBtnEl) {
+    removePhotoBtnEl.addEventListener("click", function () {
+      data.profile.photo.value = "";
+      scheduleSave();
+      renderHero();
+    });
   }
 })();

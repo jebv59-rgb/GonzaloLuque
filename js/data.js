@@ -26,7 +26,10 @@ window.SITE_DATA = {
     lead: {
       value: "Convierto planillas de ventas en dashboards que todo un equipo realmente usa. Más de 17 años en la calle vendiendo consumo masivo, y los últimos construyendo las herramientas que siempre quise tener.",
       visible: true
-    }
+    },
+    // foto de perfil: se completa sola al subir una imagen desde el modo admin (queda como imagen en base64).
+    // Vacío = se muestran las iniciales en su lugar.
+    photo: { value: "", visible: true }
   },
 
   stats: [
@@ -200,8 +203,16 @@ window.SITE_DATA = {
     { id: "lg2", name: "Inglés", level: "Básico", visible: true }
   ],
 
+  // Referencias laborales — se muestran en la tarjeta de perfil (arriba a la derecha).
+  // Completá nombre, cargo/relación y un teléfono o email de contacto para cada una.
+  references: [
+    { id: "ref1", name: "Nombre y Apellido", role: "Cargo · Empresa", contact: "Teléfono o email", visible: true },
+    { id: "ref2", name: "Nombre y Apellido", role: "Cargo · Empresa", contact: "Teléfono o email", visible: true }
+  ],
+
   contact: {
     email: { value: "jebv59@gmail.com", visible: true },
+    phone: { value: "Agregá tu teléfono", visible: true },
     github: { value: "github.com/willyluque", url: "https://github.com/willyluque", visible: true },
     instagram: { value: "@willyluque", url: "https://www.instagram.com/willyluque", visible: true },
     location: { value: "San Francisco, Córdoba, Argentina", visible: true }
