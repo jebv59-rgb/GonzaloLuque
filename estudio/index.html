@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Estudio Willy · Consola multicanal</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#15171b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Estudio Willy">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{--bg:#15171b;--panel:#262a31;--panel2:#30353d;--line:#3a4049;--txt:#e9ecef;--mut:#9aa3ad;--acc:#f2b33d;--rec:#ff3b3b;--ok:#38e07b;--voz:#5ab0ff;--pista:#c792ea;
   --metal:linear-gradient(180deg,#3a3f47 0%,#2c3037 6%,#272b31 50%,#23272c 100%)}
@@ -193,6 +199,17 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 .song.cur{background:rgba(242,179,61,.07)}
 
 #stage .sl,#stage .st-grid,#stage .st-title{text-shadow:0 2px 6px #000,0 0 18px #000}
+
+@media (max-width:900px),(orientation:portrait){
+  .st-top{flex-wrap:wrap;gap:10px;padding:12px 16px}
+  .st-title{flex-basis:100%}
+  .st-now b{font-size:38px}.st-next b{font-size:26px}
+  .st-now,.st-next{min-width:96px;padding:4px 12px}
+  .st-lyrics{padding:0 4vw}
+  .st-ctl button{padding:12px 14px}
+  .st-sep{flex-basis:100%;height:0}
+}
+#stage .st-ctl button{touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -245,9 +262,12 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
         <button id="bSaveSong" class="small">💾 Guardar tema en el repertorio</button>
         <button id="bShow" class="small">🎤 Empezar show (todo el repertorio)</button>
         <label class="chk" style="margin:0"><input type="checkbox" id="chkCount"> Cuenta 3‑2‑1 al arrancar</label>
+        <span style="flex:1"></span>
+        <button id="bExpSet" class="small" title="Para pasar el repertorio a la tablet u otra compu">⬇ Exportar repertorio</button>
+        <label class="file"><input type="file" id="fSet" accept=".estudiowilly,application/octet-stream"><button class="small" onclick="this.previousElementSibling.click()">⬆ Importar repertorio</button></label>
       </div>
       <div id="setlist"><div class="empty">Todavía no guardaste temas. Cargá una pista (audio o video), analizala, cargá la letra y tocá "Guardar tema".</div></div>
-      <p class="hint">El repertorio queda guardado en este navegador (con la pista, la letra y los acordes), así el día del show solo abrís el link y tocás "Empezar show". En escenario: <kbd>Espacio</kbd> play/pausa · <kbd>←</kbd><kbd>→</kbd> 5 s · <kbd>N</kbd> o <kbd>Av Pág</kbd> siguiente tema · <kbd>Re Pág</kbd> play/pausa (pedaleras Bluetooth) · <kbd>+</kbd><kbd>−</kbd> tamaño · <kbd>Esc</kbd> salir.</p>
+      <p class="hint">📱 <b>Para la tablet:</b> armá el repertorio en la PC, tocá "Exportar repertorio", pasá el archivo a la tablet (Drive, WhatsApp o cable), abrí este mismo link en la tablet e "Importar repertorio". Después agregá la página a la pantalla de inicio: funciona <b>sin internet</b>. En la tablet: deslizá la letra a la izquierda = siguiente tema, doble toque = play/pausa.<br>El repertorio queda guardado en este navegador (con la pista, la letra y los acordes), así el día del show solo abrís el link y tocás "Empezar show". En escenario: <kbd>Espacio</kbd> play/pausa · <kbd>←</kbd><kbd>→</kbd> 5 s · <kbd>N</kbd> o <kbd>Av Pág</kbd> siguiente tema · <kbd>Re Pág</kbd> play/pausa (pedaleras Bluetooth) · <kbd>+</kbd><kbd>−</kbd> tamaño · <kbd>Esc</kbd> salir.</p>
     </section>
 
     <section class="panel full">
@@ -1120,13 +1140,13 @@ async function openStage(fromSet){
   initCtx();ctx.resume();const el=$('#stage');el.hidden=false;
   stage={idx:-99,cidx:-99,fromSet:!!fromSet};el.style.setProperty('--fs',S.g.stageFs+'px');
   const v=$('#stVideo');if(trackVideoURL){if(v.src!==trackVideoURL)v.src=trackVideoURL;v.hidden=false;}else{v.hidden=true;v.removeAttribute('src');}
-  try{if(!document.fullscreenElement&&el.requestFullscreen)await el.requestFullscreen();}catch(e){}
+  try{if(!document.fullscreenElement&&!document.webkitFullscreenElement){if(el.requestFullscreen)await el.requestFullscreen();else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();}}catch(e){}
   try{if(navigator.wakeLock)wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
   stageHeader();renderStageText();
 }
 function closeStage(){if(!stage)return;stage=null;clearTimeout(countTimer);$('#stCount').hidden=true;$('#stage').hidden=true;const v=$('#stVideo');v.pause();
-  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});try{wakeLock&&wakeLock.release();}catch(e){}wakeLock=null;}
-document.addEventListener('fullscreenchange',()=>{});
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else if(document.webkitFullscreenElement&&document.webkitExitFullscreen)document.webkitExitFullscreen();try{wakeLock&&wakeLock.release();}catch(e){}wakeLock=null;}
+document.addEventListener('visibilitychange',async()=>{if(stage&&document.visibilityState==='visible'){try{if(navigator.wakeLock)wakeLock=await navigator.wakeLock.request('screen');}catch(e){}}});
 function stageHeader(){
   const nm=(trackName||'Tema').replace(/\.[^.]+$/,'');let idx=setlist.findIndex(x=>x.id===currentSongId);
   $('#stTitle').textContent=(stage&&stage.fromSet&&idx>=0?(idx+1)+'. ':'')+nm;
@@ -1189,6 +1209,12 @@ function stageAct(a){
   else if(a==='kar'){S.g.karaoke=!S.g.karaoke;applyAll();stageHeader();}
 }
 $$('#stage [data-a]').forEach(b=>b.onclick=()=>stageAct(b.dataset.a));
+(()=>{let x0=null,y0=0;const L=$('#stLyrics');
+  L.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;},{passive:true});
+  L.addEventListener('touchend',e=>{if(x0==null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;
+    if(Math.abs(dx)>120&&Math.abs(dy)<60){if(dx<0&&stage&&stage.fromSet)stageAct('next');else if(dx>0)stageAct('home');}},{passive:true});
+  // tocar dos veces la letra = play/pausa
+  let last=0;L.addEventListener('click',()=>{const n=Date.now();if(n-last<350)stageAct('play');last=n;});})();
 $('#stProg').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();seekTo((e.clientX-r.left)/r.width*totalDur());};
 function stageKey(e){
   const k=e.key;
@@ -1260,7 +1286,31 @@ async function nextSong(){
 }
 $('#bShow').onclick=async()=>{if(!setlist.length){msg('Primero guardá temas en el repertorio.',true);return;}
   const i=setlist.findIndex(x=>x.id===currentSongId);if(await loadSong(setlist[i>=0?i:0]))openStage(true);};
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 refreshSet();
+// ---- exportar / importar repertorio (un solo archivo .estudiowilly) ----
+$('#bExpSet').onclick=async()=>{
+  if(!setlist.length){msg('El repertorio está vacío.',true);return;}
+  msg('Armando el archivo del repertorio…');
+  const parts=[],meta=[];let off=0;
+  for(const x of setlist){const {blob,...rest}=x;const buf=await blob.arrayBuffer();meta.push({...rest,mime:blob.type||'',off,len:buf.byteLength});parts.push(buf);off+=buf.byteLength;}
+  const head=new TextEncoder().encode(JSON.stringify({app:'EstudioWilly',v:1,temas:meta})),hl=new Uint8Array(4);new DataView(hl.buffer).setUint32(0,head.length,true);
+  const d=new Date(),f='repertorio-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.estudiowilly';
+  download(new Blob([new TextEncoder().encode('EWIL'),hl,head,...parts],{type:'application/octet-stream'}),f);
+  msg('Repertorio exportado ('+setlist.length+' temas). Pasalo a la tablet por Drive, WhatsApp o cable e importalo ahí.');
+};
+$('#fSet').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{msg('Importando repertorio…');const buf=await f.arrayBuffer(),u=new Uint8Array(buf);
+    if(new TextDecoder().decode(u.slice(0,4))!=='EWIL')throw new Error('formato');
+    const hl=new DataView(buf,4,4).getUint32(0,true),meta=JSON.parse(new TextDecoder().decode(u.slice(8,8+hl))),base=8+hl;
+    let ord=setlist.length?Math.max(...setlist.map(x=>x.order))+1:0,n=0;
+    for(const m of meta.temas){const {off,len,mime,...rest}=m;const ex=setlist.find(x=>x.id===rest.id);
+      const rec={...rest,order:ex?ex.order:ord++,blob:new Blob([buf.slice(base+off,base+off+len)],{type:mime})};await DB.put(rec);n++;}
+    try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(_){}
+    await refreshSet();msg('Importados '+n+' temas al repertorio.');}
+  catch(err){console.error(err);msg('Ese archivo no es un repertorio válido de Estudio Willy.',true);}
+};
 
 /* =================== Teclado e inicio =================== */
 document.addEventListener('keydown',e=>{
