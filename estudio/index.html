@@ -210,6 +210,12 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
   .st-sep{flex-basis:100%;height:0}
 }
 #stage .st-ctl button{touch-action:manipulation}
+
+.st-inter{font-size:calc(var(--fs)*.75);color:#f2b33d;font-weight:700}
+.st-inter span{color:#cfd4da;font-weight:500;font-size:.6em}
+.tedit{margin-top:12px}
+.tedit .ktab td{vertical-align:middle}
+.tedit .ktab tr{cursor:default}
 </style>
 </head>
 <body>
@@ -588,7 +594,7 @@ async function decodeFile(file){initCtx();return await ctx.decodeAudioData(await
 async function loadTrack(e){
   const f=e.target.files[0];if(!f)return;msg('Cargando pista…');
   try{stop();trackBuf=await decodeFile(f);trackName=f.name;pos=0;setTrackFile(f);currentSongId=null;renderSetlist();
-    if(manual.text&&setlist.some(x=>x.manualText===manual.text)){manual.text='';try{localStorage.setItem('estudioWillyLetra','');}catch(_){}}manual.lines=null;$('#trackName').textContent=f.name+' · '+fmtS(trackBuf.duration);
+    if(manual.text&&setlist.some(x=>x.manualText===manual.text)){manual.text='';try{localStorage.setItem('estudioWillyLetra','');}catch(_){}}manual.lines=null;manual.off=0;$('#trackName').textContent=f.name+' · '+fmtS(trackBuf.duration);
     msg('Pista lista. ▶ para escuchar, ● REC para grabar encima.');peaksCache.clear();KEY=null;chordSegs=[];melody=null;lyrics=null;draw();renderCanc();analyzeKey();}
   catch(err){msg('No se pudo leer el archivo de audio.',true);}
   e.target.value='';
@@ -1008,9 +1014,12 @@ async function transcribe(){
   busyLyr=false;const b=$('#bLyr');if(b)b.disabled=false;
 }
 /* ---- letra manual: sincronizar, alinear o repartir ---- */
-let manual={text:'',lines:null},sync=null;
+let manual={text:'',lines:null,off:0},sync=null;
 try{manual.text=localStorage.getItem('estudioWillyLetra')||'';}catch(e){}
-const lyrLines=()=>(manual.lines&&manual.lines.every(l=>l.t0!=null))?manual.lines:lyrics;
+const lyrLines=()=>{if(manual.lines&&manual.lines.every(l=>l.t0!=null)){const o=manual.off||0;return o?manual.lines.map(l=>({...l,t0:l.t0+o,t1:l.t1+o})):manual.lines;}return lyrics;};
+// fin real de lo cantado (si no se marcó, se estima cuando hay un hueco largo hasta el verso siguiente)
+function sungEnd(ls,i){const L=ls[i],nx=ls[i+1],nw=normW(L.text).length;if(L.end)return L.t1;
+  if(nx&&nx.t0-L.t0>12)return L.t0+Math.max(5,nw*1.0);return nx?nx.t0:L.t1;}
 const normW=t=>t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zñ0-9\s]/g,' ').split(/\s+/).filter(Boolean);
 function parseLines(){const t=$('#lyrTxt');if(t){manual.text=t.value;try{localStorage.setItem('estudioWillyLetra',manual.text);}catch(e){}}
   return manual.text.split('\n').map(x=>x.trim()).filter(x=>x&&!/^\[.*\]$/.test(x));}
@@ -1022,17 +1031,24 @@ function fillTimes(lines,a0,b0){ // completa los t0 que faltan (repartidos por c
     const a=i>0?lines[i-1].t0:a0,b=j<lines.length?lines[j].t0:b0,wts=lines.slice(i>0?i-1:i,j).map(l=>Math.max(1,normW(l.text).length));
     const tot=wts.reduce((x,y)=>x+y,0);let acc=i>0?wts[0]:0;const off=i>0?1:0;
     for(let k=i;k<j;k++){lines[k].t0=a+(b-a)*acc/tot;acc+=wts[k-i+off]||1;}i=j;}
-  lines.forEach((l,k)=>{const nx=lines[k+1];l.t1=nx?nx.t0:Math.max(l.t0+2,Math.min(b0,l.t0+8));});
+  lines.forEach((l,k)=>{const nx=lines[k+1],lim=nx?nx.t0:b0;if(l.end&&l.t1>l.t0&&l.t1<=lim+0.01)return;l.end=false;l.t1=nx?nx.t0:Math.max(l.t0+2,Math.min(b0,l.t0+8));});
   return lines;
 }
-function startSync(){
-  const ls=parseLines();if(!ls.length){msg('Pegá la letra primero.',true);return;}
+function startSync(from){
+  from=Number.isInteger(from)?from:0;const ls=parseLines();if(!ls.length){msg('Pegá la letra primero.',true);return;}
   if(!trackBuf&&!takes.some(t=>t.on)){msg('Cargá la pista (o una toma) para sincronizar.',true);return;}
-  manual.lines=ls.map(text=>({text,t0:null}));if(document.activeElement)document.activeElement.blur();stop();pos=0;sync={i:0};play();renderCanc();
-  msg('Tocá Enter (o el botón) justo cuando empieza cada verso. Esc para cancelar.');
+  if(!from||!manual.lines||manual.lines.length!==ls.length)manual.lines=ls.map(text=>({text,t0:null,t1:null,end:false}));
+  for(let k=from;k<manual.lines.length;k++){manual.lines[k].t0=null;manual.lines[k].end=false;}
+  if(from>0)manual.lines[from-1].end=false;
+  if(document.activeElement)document.activeElement.blur();stop();
+  pos=from>0?Math.max(0,manual.lines[from-1].t0+(manual.off||0)-0.5):0;sync={i:from};play();renderCanc();
+  msg('Enter = empieza el verso · ↑ = terminó el verso (interludio) · Esc = cortar.');
 }
-function markSync(){if(!sync)return;manual.lines[sync.i].t0=curPos();sync.i++;if(sync.i>=manual.lines.length)endSync(true);else renderCanc();}
-function endSync(done){if(!sync)return;sync=null;pause();
+function markSync(){if(!sync)return;const L=manual.lines[sync.i];L.t0=curPos()-(manual.off||0);sync.i++;if(sync.i>=manual.lines.length){renderCanc();}else renderCanc();}
+function markEnd(){if(!sync||sync.i<1)return;const L=manual.lines[sync.i-1];L.t1=curPos()-(manual.off||0);L.end=L.t1>L.t0+0.3;
+  msg(L.end?'Fin de verso marcado: interludio hasta el próximo verso.':'Muy pegado al inicio, no se marcó.');
+  if(sync.i>=manual.lines.length)endSync(true);else renderCanc();}
+function endSync(done){if(!sync)return;const all=manual.lines.every(l=>l.t0!=null);sync=null;pause();done=done||all;
   if(manual.lines.some(l=>l.t0!=null))fillTimes(manual.lines,songStart(),songEnd());else manual.lines=null;
   renderCanc();msg(done?'¡Letra sincronizada! Los acordes ya están ubicados.':'Sincronización cortada: el resto de los versos se repartió aproximado.');}
 function alignTranscript(){
@@ -1089,9 +1105,11 @@ function renderCanc(){
       melody.slice(0,200).forEach(n=>{const o=ctx.createOscillator(),g=ctx.createGain(),t=t0+n.t0-first,d=Math.max(0.08,n.t1-n.t0);o.type='triangle';o.frequency.value=440*Math.pow(2,(n.midi+transp-69)/12);
         g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.2,t+0.01);g.gain.setValueAtTime(0.2,t+d*0.8);g.gain.linearRampToValueAtTime(0,t+d);o.connect(g);g.connect(masterG);o.start(t);o.stop(t+d+0.05);});};
   }else if(cTab==='letra'){
-    const syncBox=sync?'<div class="syncbox"><div class="hint">Verso '+(sync.i+1)+' de '+manual.lines.length+' — tocá cuando empieza:</div><div class="syncnow">'+esc(manual.lines[sync.i].text)+'</div>'+
-      (manual.lines[sync.i+1]?'<div class="hint">Sigue: '+esc(manual.lines[sync.i+1].text)+'</div>':'')+
-      '<div class="row"><button id="bMark" class="on">⏎ Marcar verso (Enter)</button><button class="small" id="bSyncX">Cancelar (Esc)</button></div></div>':'';
+    const sCur=sync&&sync.i>0?manual.lines[sync.i-1]:null,sNext=sync&&manual.lines[sync.i];
+    const syncBox=sync?'<div class="syncbox">'+(sCur?'<div class="hint">Cantando ahora:</div><div class="syncnow" style="font-size:16px;color:#cfd4da">'+esc(sCur.text)+'</div>':'')+
+      (sNext?'<div class="hint">Próximo verso ('+(sync.i+1)+' de '+manual.lines.length+'):</div><div class="syncnow">'+esc(sNext.text)+'</div>':'<div class="syncnow">Último verso: marcá cuándo termina.</div>')+
+      '<div class="row">'+(sNext?'<button id="bMark" class="on">⏎ Empieza este verso (Enter)</button>':'')+
+      (sCur?'<button id="bMarkEnd">⏸ Terminó el verso / interludio (↑)</button>':'')+'<button class="small" id="bSyncX">'+(sNext?'Cortar (Esc)':'Terminar (Esc)')+'</button></div></div>':'';
     const sheet=lyrLines();
     el.innerHTML='<div class="kgrid" style="margin-top:0"><div><div class="hint" style="margin:0 0 6px">✍️ Tu letra (un verso por renglón). Los acordes se ubican solos encima.</div>'+
       '<textarea id="lyrTxt" rows="10" placeholder="Pegá o escribí la letra acá…">'+esc(manual.text)+'</textarea>'+
@@ -1103,9 +1121,28 @@ function renderCanc(){
       '<div class="prog"><i id="lyrBar" style="width:'+lyrState.p+'%"></i></div><div class="hint" id="lyrStat">'+(lyrState.t?esc(lyrState.t)+'<br>':'')+'Mejor con la voz sola (una toma tuya o la voz separada en Colab). La primera vez descarga el modelo (necesita internet).</div></div></div>'+
       (sheet?'<div class="row"><b style="font-size:12px">'+(sheet===lyrics?'Letra transcripta con acordes':'Tu letra con acordes')+'</b><button class="small" id="cpTab">Copiar</button><button class="small" id="dlTab">⬇ .txt</button></div><pre class="tab" id="tabTxt"></pre>':'');
     if(sheet)$('#tabTxt').textContent=chordSegs.length?lyricSheet():lyricSheet()+'\n(Analizá la tonalidad para ver los acordes encima de la letra)';
+    if(manual.lines&&manual.lines.every(l=>l.t0!=null)&&!sync){
+      const ed=document.createElement('div');ed.className='tedit';
+      ed.innerHTML='<div class="row"><b style="font-size:12px">⏱️ Ajustar tiempos de la letra</b><label class="chk" style="margin:0">Corrimiento de toda la letra <input type="range" id="lyOff" min="-2" max="2" step="0.05" value="'+(manual.off||0)+'"><output id="lyOffO">'+(manual.off>0?'+':'')+(+manual.off||0).toFixed(2)+' s</output></label></div>'+
+        '<div class="hint" style="margin:0 0 6px">Si toda la letra aparece tarde, mové el corrimiento a la izquierda. ◀ ▶ mueven de a ¼ s. "Fin" marca dónde termina lo cantado (después viene interludio).</div>'+
+        '<table class="ktab"><tbody>'+manual.lines.map((l,k)=>'<tr data-k="'+k+'"><td>'+(k+1)+'</td>'+
+          '<td style="white-space:nowrap"><button class="small" data-a="s-">◀</button> <b>'+fmt(l.t0+(manual.off||0))+'</b> <button class="small" data-a="s+">▶</button></td>'+
+          '<td style="white-space:nowrap">'+(l.end?'<button class="small" data-a="e-">◀</button> fin '+fmt(l.t1+(manual.off||0))+' <button class="small" data-a="e+">▶</button> <button class="small" data-a="ex" title="Quitar fin">✕</button>':'<button class="small" data-a="ef" title="Marcar fin del verso (interludio después)">+ fin</button>')+'</td>'+
+          '<td>'+esc(l.text)+'</td><td style="white-space:nowrap"><button class="small" data-a="pl">▶ probar</button> <button class="small" data-a="rs" title="Volver a sincronizar desde este verso">🎯 desde acá</button></td></tr>').join('')+'</tbody></table>';
+      el.appendChild(ed);
+      $('#lyOff').oninput=e=>{manual.off=+e.target.value;$('#lyOffO').textContent=(manual.off>0?'+':'')+manual.off.toFixed(2)+' s';clearTimeout(window._lyT);window._lyT=setTimeout(renderCanc,400);};
+      ed.querySelectorAll('tr[data-k] button').forEach(b=>b.onclick=()=>{const k=+b.closest('tr').dataset.k,L=manual.lines[k],nx=manual.lines[k+1],pv=manual.lines[k-1],a=b.dataset.a;
+        if(a==='s-'||a==='s+'){L.t0=Math.max(pv?pv.t0+0.1:0,Math.min((L.end?L.t1:nx?nx.t0:1e9)-0.2,L.t0+(a==='s+'?0.25:-0.25)));if(pv&&!pv.end)pv.t1=L.t0;if(pv&&pv.end&&pv.t1>L.t0)pv.t1=L.t0;}
+        else if(a==='e-'||a==='e+'){L.t1=Math.max(L.t0+0.3,Math.min(nx?nx.t0:1e9,L.t1+(a==='e+'?0.25:-0.25)));}
+        else if(a==='ef'){L.end=true;L.t1=Math.min(nx?nx.t0-0.1:L.t0+8,L.t0+Math.max(2,normW(L.text).length*0.8));}
+        else if(a==='ex'){L.end=false;L.t1=nx?nx.t0:L.t1;}
+        else if(a==='pl'){seekTo(Math.max(0,L.t0+(manual.off||0)-1.5));if(!playing)play();return;}
+        else if(a==='rs'){startSync(k);return;}
+        renderCanc();});
+    }
     $('#lyrTxt').oninput=()=>{parseLines();};
-    $('#bSync').onclick=startSync;$('#bAlign').onclick=alignTranscript;$('#bSpread').onclick=spreadEven;
-    const bm=$('#bMark');if(bm)bm.onclick=markSync;const bx=$('#bSyncX');if(bx)bx.onclick=()=>endSync(false);
+    $('#bSync').onclick=()=>startSync(0);$('#bAlign').onclick=alignTranscript;$('#bSpread').onclick=spreadEven;
+    const bm=$('#bMark');if(bm)bm.onclick=markSync;const be=$('#bMarkEnd');if(be)be.onclick=markEnd;const bx=$('#bSyncX');if(bx)bx.onclick=()=>endSync(false);
     if(!$('#lyrSrc').options.length||busyLyr)$('#bLyr').disabled=true;
     $('#bLyr').onclick=transcribe;
   }
@@ -1157,19 +1194,28 @@ function stageHeader(){
   $('#stNextSong').disabled=!(stage&&stage.fromSet&&nx);
 }
 function chordAt(t){for(let i=0;i<chordSegs.length;i++){const c=chordSegs[i];if(t>=c.t0&&t<c.t1)return i;}return -1;}
-function lineHTML(L,cls){
-  const words=L.text.split(/\s+/),n=words.length,d=Math.min(L.t1-L.t0,n*0.55+0.6),ch=new Array(n).fill('');
+function lineHTML(L,cls,se){
+  const words=L.text.split(/\s+/),n=words.length,d=Math.min((se||L.t1)-L.t0,Math.max(n*0.55+0.6,((se||L.t1)-L.t0)*0.85)),ch=new Array(n).fill('');
   chordSegs.forEach(c=>{if(c.q==='N')return;const t=c.t0<L.t0&&c.t1>L.t0?L.t0:c.t0;if(t<L.t0||t>=L.t1)return;
     const k=Math.min(n-1,Math.floor((t-L.t0)/Math.max(0.01,L.t1-L.t0)*n));const nm=chordName(c.root,c.q);if(!ch[k].split(' ').includes(nm))ch[k]=(ch[k]?ch[k]+' ':'')+nm;});
   return '<div class="sl '+cls+'">'+words.map((w,k)=>'<span class="w" data-t="'+(L.t0+d*k/n)+'"><i>'+esc(ch[k])+'</i>'+esc(w)+'</span>').join('')+'</div>';
 }
+function stageMode(ls,t){ // qué mostrar ahora: intro, verso, interludio o final
+  let i=-1;for(let k=0;k<ls.length;k++)if(ls[k].t0<=t+0.25)i=k;
+  if(i<0)return {m:'intro',i,until:ls[0].t0};
+  const e=sungEnd(ls,i),nx=ls[i+1];
+  if(!nx)return t>e+1?{m:'fin',i}:{m:'verso',i};
+  if(t>e+0.3&&nx.t0-t>1.5)return {m:'inter',i,until:nx.t0};
+  return {m:'verso',i};
+}
 function renderStageText(){
   if(!stage)return;const t=curPos(),box=$('#stLyrics'),ls=stageLines();
-  if(ls&&ls.length){let i=-1;for(let k=0;k<ls.length;k++)if(ls[k].t0<=t+0.25)i=k;stage.idx=i;
-    let h='';if(i>=1)h+=lineHTML(ls[i-1],'prev');
-    if(i<0)h+='<div class="sl cur" style="color:#9aa3ad">♪ Intro…</div>'+lineHTML(ls[0],'');
-    else{h+=lineHTML(ls[i],'cur');for(let k=i+1;k<=Math.min(ls.length-1,i+2);k++)h+=lineHTML(ls[k],'');}
-    if(i===ls.length-1&&t>ls[i].t1+1)h='<div class="st-end">♪ Final</div>';
+  if(ls&&ls.length){const S0=stageMode(ls,t),i=S0.i;stage.idx=i;stage.mode=S0.m;let h='';
+    const cd=u=>'<div class="st-inter">♪ '+(S0.m==='intro'?'Intro':'Interludio')+' <span id="stCd">'+(u-t>0?'— entra la voz en '+Math.ceil(u-t)+' s':'')+'</span></div>';
+    if(S0.m==='intro')h=cd(S0.until)+lineHTML(ls[0],'')+(ls[1]?lineHTML(ls[1],''):'');
+    else if(S0.m==='inter')h=lineHTML(ls[i],'prev')+cd(S0.until)+lineHTML(ls[i+1],'')+(ls[i+2]?lineHTML(ls[i+2],''):'');
+    else if(S0.m==='fin')h='<div class="st-end">♪ Final</div>';
+    else{if(i>=1)h+=lineHTML(ls[i-1],'prev');h+=lineHTML(ls[i],'cur',sungEnd(ls,i));for(let k=i+1;k<=Math.min(ls.length-1,i+2);k++)h+=lineHTML(ls[k],'');}
     box.innerHTML=h;}
   else{const ci=chordAt(t);stage.cidx=ci;const real=chordSegs.filter(c=>c.q!=='N');
     if(!real.length){box.innerHTML='<div class="st-end">Sin acordes ni letra: analizá la tonalidad y cargá la letra.</div>';return;}
@@ -1185,7 +1231,8 @@ function updateStage(){
   const left=nx?nx.t0-t:99,box=$('#stNext').parentElement;
   $('#stNext').textContent=nx?chordName(nx.root,nx.q):'–';$('#stNextLbl').textContent=nx&&left<4&&playing?'SIGUE EN '+Math.ceil(left):'SIGUE';box.classList.toggle('soon',!!nx&&left<1.5&&playing);
   const ls=stageLines();
-  if(ls){let i=-1;for(let k=0;k<ls.length;k++)if(ls[k].t0<=t+0.25)i=k;if(i!==stage.idx)renderStageText();
+  if(ls&&ls.length){const S0=stageMode(ls,t);if(S0.i!==stage.idx||S0.m!==stage.mode)renderStageText();
+    else if(S0.until!=null){const c=$('#stCd');if(c)c.textContent=S0.until-t>0?'— entra la voz en '+Math.ceil(S0.until-t)+' s':'';}
     document.querySelectorAll('#stLyrics .sl.cur .w').forEach(w=>w.classList.toggle('done',+w.dataset.t<=t));}
   else if(ci!==stage.cidx)renderStageText();
   const v=$('#stVideo');if(!v.hidden&&v.src){
@@ -1262,7 +1309,7 @@ $('#bSaveSong').onclick=async()=>{
   const old=setlist.find(x=>x.id===currentSongId);
   const rec={id:old?old.id:'t'+Date.now(),order:old?old.order:(setlist.length?Math.max(...setlist.map(x=>x.order))+1:0),
     name:old?old.name:(trackName||'Tema').replace(/\.[^.]+$/,''),fileName:trackName,blob:trackFile,isVideo:!!trackVideoURL,
-    manualText:manual.text,manualLines:manual.lines,lyrics,chordSegs,KEY,transp,capoSel,savedAt:Date.now()};
+    manualText:manual.text,manualLines:manual.lines,lyrOff:manual.off||0,lyrics,chordSegs,KEY,transp,capoSel,savedAt:Date.now()};
   try{await DB.put(rec);currentSongId=rec.id;try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
     await refreshSet();msg((old?'Tema actualizado':'Tema guardado')+' en el repertorio: '+rec.name);}
   catch(e){console.error(e);msg('No se pudo guardar (¿falta espacio en el navegador?).',true);}
@@ -1271,7 +1318,7 @@ async function loadSong(x){
   try{msg('Cargando "'+x.name+'"…');stop();initCtx();
     trackBuf=await ctx.decodeAudioData(await x.blob.arrayBuffer());trackName=x.fileName||x.name;setTrackFile(x.blob);currentSongId=x.id;pos=0;
     chordSegs=x.chordSegs||[];KEY=x.KEY||null;transp=x.transp||0;capoSel=x.capoSel||0;lyrics=x.lyrics||null;melody=null;
-    manual={text:x.manualText||'',lines:x.manualLines||null};try{localStorage.setItem('estudioWillyLetra',manual.text);}catch(e){}
+    manual={text:x.manualText||'',lines:x.manualLines||null,off:x.lyrOff||0};try{localStorage.setItem('estudioWillyLetra',manual.text);}catch(e){}
     $('#selTransp').value=transp;$('#trackName').textContent=trackName+' · '+fmtS(trackBuf.duration);
     peaksCache.clear();renderKey();renderCanc();draw();renderSetlist();if(stage){stageHeader();stage.idx=-99;renderStageText();
       const v=$('#stVideo');if(trackVideoURL){v.src=trackVideoURL;v.hidden=false;}else{v.hidden=true;v.removeAttribute('src');}}
@@ -1315,7 +1362,8 @@ $('#fSet').onchange=async e=>{
 /* =================== Teclado e inicio =================== */
 document.addEventListener('keydown',e=>{
   if(stage&&stageKey(e))return;
-  if(sync&&(e.key==='Enter'||e.key==='ArrowDown')){e.preventDefault();markSync();return;}
+  if(sync&&(e.key==='Enter'||e.key==='ArrowDown')){e.preventDefault();if(sync.i<manual.lines.length)markSync();return;}
+  if(sync&&e.key==='ArrowUp'){e.preventDefault();markEnd();return;}
   if(sync&&e.key==='Escape'){e.preventDefault();endSync(false);return;}
   const tg=e.target.tagName;if((tg==='INPUT'&&e.target.type==='text')||tg==='SELECT'||tg==='TEXTAREA')return;
   if(e.code==='Space'){e.preventDefault();$('#bPlay').click();}
