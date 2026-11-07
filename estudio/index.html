@@ -216,6 +216,9 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 .tedit{margin-top:12px}
 .tedit .ktab td{vertical-align:middle}
 .tedit .ktab tr{cursor:default}
+.tedit .vtx{width:100%;background:#06080a;border:1px solid #2d333b;color:#e9ecef;border-radius:3px;padding:5px 7px;font:13px "Segoe UI",sans-serif}
+.tedit .vtx:focus{outline:1px solid var(--acc)}
+.tedit td button.small{padding:3px 6px;margin-right:2px}
 </style>
 </head>
 <body>
@@ -1009,7 +1012,8 @@ async function transcribe(){
     const out=await asr(src.data,{language:'spanish',task:'transcribe',chunk_length_s:30,stride_length_s:5,return_timestamps:true});
     const ch=(out.chunks&&out.chunks.length)?out.chunks:[{timestamp:[0,src.data.length/SR],text:out.text||''}];
     lyrics=ch.map(c=>{const a=c.timestamp[0]||0,b=c.timestamp[1]==null?a+4:c.timestamp[1];return {t0:src.offset+a,t1:src.offset+Math.max(b,a+0.5),text:(c.text||'').trim()};}).filter(l=>l.text);
-    set(lyrics.length?'Listo: '+lyrics.length+' frases.':'No se reconoció texto.',100);renderCanc();
+    set(lyrics.length?'Listo: '+lyrics.length+' frases. Ya podés corregirla abajo.':'No se reconoció texto.',100);
+    if(lyrics.length&&!(manual.lines&&manual.lines.length&&manual.text.trim()))takeTranscript();else renderCanc();
   }catch(e){console.error(e);set('Error: '+(e.message||e)+(String(e).includes('fetch')||String(e).includes('import')?' (¿hay conexión a internet?)':''),0);}
   busyLyr=false;const b=$('#bLyr');if(b)b.disabled=false;
 }
@@ -1062,6 +1066,13 @@ function alignTranscript(){
   fillTimes(manual.lines,songStart(),songEnd());renderCanc();
   msg('Alineados '+ok+' de '+ls.length+' versos con la transcripción'+(ok<ls.length?' (el resto, aproximado).':'.'),ok<ls.length*0.5);
 }
+function takeTranscript(){
+  if(!lyrics||!lyrics.length){msg('Primero transcribí la letra.',true);return;}
+  manual.off=0;manual.lines=lyrics.map((l,k)=>{const nx=lyrics[k+1];return {text:l.text,t0:l.t0,t1:l.t1,end:!nx||nx.t0-l.t1>1.5};});
+  fillTimes(manual.lines,songStart(),songEnd());saveManualText();renderCanc();
+  msg('La letra transcripta ya es editable: corregí las palabras en la tabla de abajo (los tiempos se mantienen).');
+}
+function saveManualText(){if(manual.lines)manual.text=manual.lines.map(l=>l.text).join('\n');try{localStorage.setItem('estudioWillyLetra',manual.text);}catch(e){}}
 function spreadEven(){const ls=parseLines();if(!ls.length){msg('Pegá la letra primero.',true);return;}
   if(!chordSegs.length&&!totalDur()){msg('Cargá la pista primero.',true);return;}
   manual.lines=fillTimes(ls.map(text=>({text,t0:null})),songStart(),songEnd());renderCanc();msg('Versos repartidos a lo largo del tema (aproximado): para precisión usá "Sincronizar tocando".');}
@@ -1112,8 +1123,8 @@ function renderCanc(){
       (sCur?'<button id="bMarkEnd">⏸ Terminó el verso / interludio (↑)</button>':'')+'<button class="small" id="bSyncX">'+(sNext?'Cortar (Esc)':'Terminar (Esc)')+'</button></div></div>':'';
     const sheet=lyrLines();
     el.innerHTML='<div class="kgrid" style="margin-top:0"><div><div class="hint" style="margin:0 0 6px">✍️ Tu letra (un verso por renglón). Los acordes se ubican solos encima.</div>'+
-      '<textarea id="lyrTxt" rows="10" placeholder="Pegá o escribí la letra acá…">'+esc(manual.text)+'</textarea>'+
-      '<div class="row"><button class="small" id="bSync">🎯 Sincronizar tocando</button><button class="small" id="bAlign"'+(lyrics?'':' disabled title="Primero transcribí la letra"')+'>🤖 Alinear con la transcripción</button><button class="small" id="bSpread">≈ Repartir parejo</button></div>'+
+      '<textarea id="lyrTxt" rows="10" placeholder="Pegá o escribí la letra acá…">'+esc(manual.text)+'</textarea>'+'<div class="hint" id="lyrWarn" hidden style="color:#ffb86b">Cambió la cantidad de versos: para no perder los tiempos, agregá o quitá versos desde la tabla de abajo, o volvé a sincronizar.</div>'+
+      '<div class="row"><button class="small" id="bSync">🎯 Sincronizar tocando</button><button class="small" id="bAlign"'+(lyrics?'':' disabled title="Primero transcribí la letra"')+'>🤖 Alinear con la transcripción</button><button class="small" id="bSpread">≈ Repartir parejo</button>'+(lyrics?'<button class="small" id="bTake" title="Reemplaza tu letra por la transcripta, con sus tiempos, para corregirla">✏️ Usar la transcripción y corregirla</button>':'')+'</div>'+
       syncBox+'</div><div>'+
       '<div class="hint" style="margin:0 0 6px">🎙️ O transcribila automáticamente</div><div class="row" style="margin-top:0"><select id="lyrSrc">'+srcOptions(!!trackBuf)+'</select>'+
       '<select id="lyrModel"><option value="Xenova/whisper-base">Rápido (~80 MB)</option><option value="Xenova/whisper-small">Preciso (~250 MB)</option></select>'+
@@ -1121,17 +1132,32 @@ function renderCanc(){
       '<div class="prog"><i id="lyrBar" style="width:'+lyrState.p+'%"></i></div><div class="hint" id="lyrStat">'+(lyrState.t?esc(lyrState.t)+'<br>':'')+'Mejor con la voz sola (una toma tuya o la voz separada en Colab). La primera vez descarga el modelo (necesita internet).</div></div></div>'+
       (sheet?'<div class="row"><b style="font-size:12px">'+(sheet===lyrics?'Letra transcripta con acordes':'Tu letra con acordes')+'</b><button class="small" id="cpTab">Copiar</button><button class="small" id="dlTab">⬇ .txt</button></div><pre class="tab" id="tabTxt"></pre>':'');
     if(sheet)$('#tabTxt').textContent=chordSegs.length?lyricSheet():lyricSheet()+'\n(Analizá la tonalidad para ver los acordes encima de la letra)';
-    if(manual.lines&&manual.lines.every(l=>l.t0!=null)&&!sync){
-      const ed=document.createElement('div');ed.className='tedit';
+    var ed=null;if(manual.lines&&manual.lines.every(l=>l.t0!=null)&&!sync){
+      ed=document.createElement('div');ed.className='tedit';
       ed.innerHTML='<div class="row"><b style="font-size:12px">⏱️ Ajustar tiempos de la letra</b><label class="chk" style="margin:0">Corrimiento de toda la letra <input type="range" id="lyOff" min="-2" max="2" step="0.05" value="'+(manual.off||0)+'"><output id="lyOffO">'+(manual.off>0?'+':'')+(+manual.off||0).toFixed(2)+' s</output></label></div>'+
-        '<div class="hint" style="margin:0 0 6px">Si toda la letra aparece tarde, mové el corrimiento a la izquierda. ◀ ▶ mueven de a ¼ s. "Fin" marca dónde termina lo cantado (después viene interludio).</div>'+
+        '<div class="hint" style="margin:0 0 6px">✏️ Corregí cada verso escribiendo directo en la tabla (los tiempos no se pierden). ✂ divide un verso en dos donde dejaste el cursor, ⤒ lo une con el de arriba. Si toda la letra aparece tarde, mové el corrimiento a la izquierda. ◀ ▶ mueven de a ¼ s. "Fin" marca dónde termina lo cantado (después viene interludio).</div>'+
         '<table class="ktab"><tbody>'+manual.lines.map((l,k)=>'<tr data-k="'+k+'"><td>'+(k+1)+'</td>'+
           '<td style="white-space:nowrap"><button class="small" data-a="s-">◀</button> <b>'+fmt(l.t0+(manual.off||0))+'</b> <button class="small" data-a="s+">▶</button></td>'+
           '<td style="white-space:nowrap">'+(l.end?'<button class="small" data-a="e-">◀</button> fin '+fmt(l.t1+(manual.off||0))+' <button class="small" data-a="e+">▶</button> <button class="small" data-a="ex" title="Quitar fin">✕</button>':'<button class="small" data-a="ef" title="Marcar fin del verso (interludio después)">+ fin</button>')+'</td>'+
-          '<td>'+esc(l.text)+'</td><td style="white-space:nowrap"><button class="small" data-a="pl">▶ probar</button> <button class="small" data-a="rs" title="Volver a sincronizar desde este verso">🎯 desde acá</button></td></tr>').join('')+'</tbody></table>';
+          '<td style="width:45%"><input class="vtx" value="'+esc(l.text)+'" placeholder="(verso vacío)"></td><td style="white-space:nowrap"><button class="small" data-a="sp" title="Dividir en dos versos donde está el cursor">✂</button><button class="small" data-a="mg" title="Unir con el verso de arriba">⤒</button><button class="small" data-a="ad" title="Agregar un verso debajo">＋</button><button class="small" data-a="dl" title="Borrar verso">🗑</button> <button class="small" data-a="pl">▶ probar</button> <button class="small" data-a="rs" title="Volver a sincronizar desde este verso">🎯 desde acá</button></td></tr>').join('')+'</tbody></table>';
       el.appendChild(ed);
       $('#lyOff').oninput=e=>{manual.off=+e.target.value;$('#lyOffO').textContent=(manual.off>0?'+':'')+manual.off.toFixed(2)+' s';clearTimeout(window._lyT);window._lyT=setTimeout(renderCanc,400);};
-      ed.querySelectorAll('tr[data-k] button').forEach(b=>b.onclick=()=>{const k=+b.closest('tr').dataset.k,L=manual.lines[k],nx=manual.lines[k+1],pv=manual.lines[k-1],a=b.dataset.a;
+      ed.querySelectorAll('.vtx').forEach(inp=>{const k=+inp.closest('tr').dataset.k;
+        inp.addEventListener('keyup',()=>inp.dataset.c=inp.selectionStart);inp.addEventListener('click',()=>inp.dataset.c=inp.selectionStart);
+        inp.addEventListener('input',()=>{manual.lines[k].text=inp.value.trim();saveManualText();const p=$('#tabTxt');if(p)p.textContent=lyricSheet();const ta=$('#lyrTxt');if(ta)ta.value=manual.text;});
+        inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const nx=ed.querySelectorAll('.vtx')[k+1];if(nx)nx.focus();}});});
+      ed.querySelectorAll('tr[data-k] button').forEach(b=>b.onmousedown=e=>{const inp=b.closest('tr').querySelector('.vtx');if(document.activeElement===inp)inp.dataset.c=inp.selectionStart;});
+      ed.querySelectorAll('tr[data-k] button').forEach(b=>b.onclick=()=>{
+        {const k=+b.closest('tr').dataset.k,a=b.dataset.a,ls=manual.lines,L=ls[k];
+         if(a==='sp'){const w=L.text.split(/\s+/).filter(Boolean);if(w.length<2){msg('Ese verso tiene una sola palabra.',true);return;}
+           const inp=b.closest('tr').querySelector('.vtx'),c=+(inp.dataset.c||-1);let cut=Math.floor(w.length/2);
+           if(c>0&&c<L.text.length){cut=L.text.slice(0,c).trim().split(/\s+/).filter(Boolean).length;cut=Math.max(1,Math.min(w.length-1,cut));}
+           const e=sungEnd(ls,k),ts=L.t0+(e-L.t0)*cut/w.length,nl={text:w.slice(cut).join(' '),t0:ts,t1:L.t1,end:L.end};
+           L.text=w.slice(0,cut).join(' ');L.t1=ts;L.end=false;ls.splice(k+1,0,nl);saveManualText();renderCanc();return;}
+         if(a==='mg'){if(k<1)return;const pv=ls[k-1];pv.text=(pv.text+' '+L.text).trim();pv.t1=L.t1;pv.end=L.end;ls.splice(k,1);saveManualText();renderCanc();return;}
+         if(a==='dl'){if(ls.length<2){msg('Tiene que quedar al menos un verso.',true);return;}const pv=ls[k-1];ls.splice(k,1);if(pv&&!pv.end)pv.t1=ls[k]?ls[k].t0:L.t1;saveManualText();renderCanc();return;}
+         if(a==='ad'){const nx=ls[k+1],st=L.end?L.t1+0.2:(nx?(L.t0+nx.t0)/2:L.t0+3),en=nx?nx.t0:st+4;if(!L.end)L.t1=st;
+           ls.splice(k+1,0,{text:'',t0:Math.min(st,en-0.2),t1:en,end:false});saveManualText();renderCanc();setTimeout(()=>{const f=$$('.tedit .vtx')[k+1];if(f)f.focus();},50);return;}}const k=+b.closest('tr').dataset.k,L=manual.lines[k],nx=manual.lines[k+1],pv=manual.lines[k-1],a=b.dataset.a;
         if(a==='s-'||a==='s+'){L.t0=Math.max(pv?pv.t0+0.1:0,Math.min((L.end?L.t1:nx?nx.t0:1e9)-0.2,L.t0+(a==='s+'?0.25:-0.25)));if(pv&&!pv.end)pv.t1=L.t0;if(pv&&pv.end&&pv.t1>L.t0)pv.t1=L.t0;}
         else if(a==='e-'||a==='e+'){L.t1=Math.max(L.t0+0.3,Math.min(nx?nx.t0:1e9,L.t1+(a==='e+'?0.25:-0.25)));}
         else if(a==='ef'){L.end=true;L.t1=Math.min(nx?nx.t0-0.1:L.t0+8,L.t0+Math.max(2,normW(L.text).length*0.8));}
@@ -1140,8 +1166,11 @@ function renderCanc(){
         else if(a==='rs'){startSync(k);return;}
         renderCanc();});
     }
-    $('#lyrTxt').oninput=()=>{parseLines();};
-    $('#bSync').onclick=()=>startSync(0);$('#bAlign').onclick=alignTranscript;$('#bSpread').onclick=spreadEven;
+    $('#lyrTxt').oninput=()=>{const ls=parseLines();
+      if(manual.lines&&manual.lines.length===ls.length){ls.forEach((t,k)=>manual.lines[k].text=t);clearTimeout(window._txT);
+        window._txT=setTimeout(()=>{const p=$('#tabTxt');if(p)p.textContent=lyricSheet();ed&&ed.querySelectorAll('.vtx').forEach((x,k)=>{if(document.activeElement!==x)x.value=manual.lines[k].text;});},300);}
+      else if(manual.lines){const h=$('#lyrWarn');if(h)h.hidden=false;}};
+    $('#bSync').onclick=()=>startSync(0);const bt=$('#bTake');if(bt)bt.onclick=takeTranscript;$('#bAlign').onclick=alignTranscript;$('#bSpread').onclick=spreadEven;
     const bm=$('#bMark');if(bm)bm.onclick=markSync;const be=$('#bMarkEnd');if(be)be.onclick=markEnd;const bx=$('#bSyncX');if(bx)bx.onclick=()=>endSync(false);
     if(!$('#lyrSrc').options.length||busyLyr)$('#bLyr').disabled=true;
     $('#bLyr').onclick=transcribe;
