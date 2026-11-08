@@ -258,6 +258,26 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 .cbtn:hover{filter:brightness(1.2)}
 .ccfg{background:#06080a;border-radius:4px;padding:6px 8px;margin:6px 0;font-size:12px;line-height:1.7}
 #colabMode{margin:4px 0}
+
+.transport .stagebtn{width:auto;padding:0 14px;color:#000;background:linear-gradient(#ffd27a,#f2b33d);font-weight:800}
+.st-chv{display:flex;gap:4vw;align-items:center;justify-content:center;height:100%}
+.st-dgs{display:flex;gap:2vw;align-items:flex-end}
+.st-dg{background:#f4f1ea;border-radius:12px;padding:6px 10px 2px;text-align:center;color:#111;width:min(18vw,190px);box-shadow:0 4px 18px #000a}
+.st-dg.big{width:min(30vw,330px);outline:4px solid #f2b33d}
+.st-dg small{display:block;font:800 12px/1.4 Arial,sans-serif;letter-spacing:2px;color:#666}
+.st-dg.empty{background:#1a1d21;color:#555}.st-dgx{font-size:60px;padding:30px 0}
+.st-right{display:flex;flex-direction:column;gap:18px;max-width:46vw}
+.st-beats{display:flex;gap:14px}.st-beats i{width:34px;height:34px;border-radius:50%;background:#2a2f37;border:2px solid #444}
+.st-beats i.one{border-color:#f2b33d}.st-beats i.on{background:#5ab0ff;box-shadow:0 0 14px #5ab0ff}.st-beats i.one.on{background:#f2b33d;box-shadow:0 0 16px #f2b33d}
+.st-strip{display:flex;flex-wrap:wrap;gap:8px}
+.st-cbar{background:#1a1d21;border:2px solid #2d333b;border-radius:8px;padding:6px 12px;min-width:90px}
+.st-cbar small{display:block;font-size:11px;color:#7d8590}.st-cbar b{font-size:calc(var(--fs)*.55);color:#cfd4da}
+.st-cbar.cur{border-color:#f2b33d;background:#2a2210}.st-cbar.cur b{color:#f2b33d}.st-cbar.past{opacity:.4}
+.st-both{display:flex;gap:3vw;align-items:center;height:100%}
+.st-side{display:flex;flex-direction:column;gap:12px;flex:0 0 auto}
+.st-side .st-dg{width:min(16vw,170px)}.st-side .st-dg.big{width:min(20vw,220px)}
+.st-lyr{flex:1;display:flex;flex-direction:column;justify-content:center;gap:calc(var(--fs)*.45)}
+@media (orientation:portrait){.st-chv{flex-direction:column;gap:20px}.st-right{max-width:92vw}.st-both{flex-direction:column}.st-side{flex-direction:row}}
 </style>
 </head>
 <body>
@@ -268,6 +288,7 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
     <button id="bPlay" title="Reproducir / pausa (Espacio)">▶</button>
     <button id="bStop" title="Detener">⏹</button>
     <button id="bRec" title="Grabar en los canales armados (R)">● REC</button>
+    <button id="bStageTop" class="stagebtn" title="Pantalla completa con letra, acordes y diagramas para tocar en vivo">🎬 ESCENARIO</button>
   </div>
   <div class="lcd" id="time">00:00.0 / 00:00</div>
   <div class="msg" id="msg">Cargá una pista o activá las entradas para empezar.</div>
@@ -448,7 +469,7 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
       <button data-a="play" id="stPlay" class="big">▶</button><button data-a="fwd">5 s ⏩</button>
       <button data-a="next" id="stNextSong">Siguiente tema ⏭</button><span class="st-sep"></span>
       <button data-a="tm" title="Bajar medio tono los acordes">♭</button><span id="stTr" class="st-tr">0</span><button data-a="tp" title="Subir medio tono los acordes">♯</button>
-      <button data-a="fm">A−</button><button data-a="fp">A+</button><button data-a="kar" id="stKar">Karaoke</button><button data-a="exit">✕ Salir</button>
+      <button data-a="fm">A−</button><button data-a="fp">A+</button><button data-a="view" id="stView">👁 Vista: auto</button><button data-a="kar" id="stKar">Karaoke</button><button data-a="exit">✕ Salir</button>
     </div>
   </div>
 </div>
@@ -1829,13 +1850,15 @@ function setTrackFile(f){trackFile=f||null;if(trackVideoURL){URL.revokeObjectURL
   if(f&&(f.type||'').startsWith('video'))trackVideoURL=URL.createObjectURL(f);}
 const stageLines=()=>lyrLines()||null;
 async function openStage(fromSet){
-  if(!trackBuf){msg('Cargá un tema primero (o elegí uno del repertorio).',true);return;}
+  if(!trackBuf&&!takes.some(t=>t.on)){msg('Para el escenario cargá una pista, pistas separadas o grabá algo (o elegí un tema del repertorio).',true);return;}
   initCtx();ctx.resume();const el=$('#stage');el.hidden=false;
   stage={idx:-99,cidx:-99,fromSet:!!fromSet};el.style.setProperty('--fs',S.g.stageFs+'px');
   const v=$('#stVideo');if(trackVideoURL){if(v.src!==trackVideoURL)v.src=trackVideoURL;v.hidden=false;}else{v.hidden=true;v.removeAttribute('src');}
   try{if(!document.fullscreenElement&&!document.webkitFullscreenElement){if(el.requestFullscreen)await el.requestFullscreen();else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();}}catch(e){}
   try{if(navigator.wakeLock)wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
   stageHeader();renderStageText();
+  if(!chordSegs.length&&!analyzing){await analyzeKey();if(stage){stageHeader();stage.key=null;renderStageText();}}
+  if(stage&&chordSegs.length&&!(S.g.bpm>0)){await estimateTempo();if(stage){stage.key=null;renderStageText();}}
 }
 function closeStage(){if(!stage)return;stage=null;clearTimeout(countTimer);$('#stCount').hidden=true;$('#stage').hidden=true;const v=$('#stVideo');v.pause();
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else if(document.webkitFullscreenElement&&document.webkitExitFullscreen)document.webkitExitFullscreen();try{wakeLock&&wakeLock.release();}catch(e){}wakeLock=null;}
@@ -1864,33 +1887,60 @@ function stageMode(ls,t){ // qué mostrar ahora: intro, verso, interludio o fina
   if(t>e+0.3&&nx.t0-t>1.5)return {m:'inter',i,until:nx.t0};
   return {m:'verso',i};
 }
+const VIEWN={auto:'👁 Vista: auto',letra:'👁 Vista: letra',acordes:'👁 Vista: acordes',ambos:'👁 Letra + diagramas'};
+function stageView(){const v=S.g.stageView||'auto',ls=stageLines(),hasL=!!(ls&&ls.length);if(v==='auto')return hasL?'letra':'acordes';if((v==='letra'||v==='ambos')&&!hasL)return 'acordes';return v;}
+function nextChord(ci){const cur=chordSegs[ci];for(let k=Math.max(0,ci+1);k<chordSegs.length;k++)if(chordSegs[k].q!=='N'&&(!cur||chordSegs[k].root!==cur.root||chordSegs[k].q!==cur.q))return chordSegs[k];return null;}
+function barInfo(t){if(!(S.g.bpm>0))return null;const bt=60/S.g.bpm,bpb=S.g.meter==='3/4'?3:S.g.meter==='6/8'?2:4,bi=Math.floor((t-S.g.beat0)/bt+1e-6);
+  return {bt,bpb,bar:Math.floor(bi/bpb),beat:((bi%bpb)+bpb)%bpb,barLen:bt*bpb};}
+function diagHTML(c,big,label){
+  if(!c||c.q==='N')return '<div class="st-dg'+(big?' big':'')+' empty"><small>'+(label||'')+'</small><div class="st-dgx">–</div></div>';
+  const sr=c.root+transp-capoSel,nm=capoSel?nn(sr)+SUF[c.q]:chordName(c.root,c.q);
+  const svg=chordSVG(nm,shapeOf(sr,c.q),capoSel?'suena '+chordName(c.root,c.q):'').replace('width="104"','width="100%"').replace(/ height="\d+"/,'');
+  return '<div class="st-dg'+(big?' big':'')+'"><small>'+(label||'')+'</small>'+svg+'</div>';}
+function chordsViewHTML(t){
+  const ci=chordAt(t),cur=chordSegs[ci],nx=nextChord(ci),real=chordSegs.filter(c=>c.q!=='N');
+  if(!real.length)return '<div class="st-end">'+(analyzing?'Analizando los acordes…':'Todavía no hay acordes: tocá "Analizar tonalidad".')+'</div>';
+  let strip='';const bi=barInfo(t);
+  if(bi){const first=Math.floor((real[0].t0-S.g.beat0)/bi.barLen+1e-6);
+    for(let k=bi.bar-1;k<=bi.bar+6;k++){const st=S.g.beat0+k*bi.barLen,en=st+bi.barLen,names=[];
+      chordSegs.forEach(c=>{if(c.q==='N')return;if((c.t0<=st+0.05&&c.t1>st+0.05)||(c.t0>st+0.05&&c.t0<en-0.05)){const n=chordName(c.root,c.q);if(names[names.length-1]!==n)names.push(n);}});
+      if(en<real[0].t0-0.05||st>real[real.length-1].t1)continue;
+      strip+='<div class="st-cbar'+(k===bi.bar?' cur':k<bi.bar?' past':'')+'"><small>c. '+(k-first+1)+'</small><b>'+(names.join(' · ')||'%')+'</b></div>';}}
+  else{const ri=cur?real.indexOf(cur):-1,st=Math.max(0,ri-1);real.slice(st,st+8).forEach(c=>{strip+='<div class="st-cbar'+(c===cur?' cur':'')+'"><b>'+chordName(c.root,c.q)+'</b></div>';});}
+  const beats=bi?'<div class="st-beats" id="stBeats">'+Array.from({length:bi.bpb},(_,k)=>'<i'+(k===0?' class="one"':'')+'></i>').join('')+'</div>':'<div class="hint" style="font-size:15px">Sin tempo: tocá "Detectar" tempo en la mesa para ver los compases.</div>';
+  return '<div class="st-chv"><div class="st-dgs">'+diagHTML(cur,true,'AHORA')+diagHTML(nx,false,'SIGUE')+'</div><div class="st-right">'+beats+'<div class="st-strip">'+strip+'</div></div></div>';
+}
+function lyricsHTML(ls,t){
+  const S0=stageMode(ls,t),i=S0.i;let h='';
+  const cd=u=>'<div class="st-inter">♪ '+(S0.m==='intro'?'Intro':'Interludio')+' <span id="stCd">'+(u-t>0?'— entra la voz en '+Math.ceil(u-t)+' s':'')+'</span></div>';
+  if(S0.m==='intro')h=cd(S0.until)+lineHTML(ls[0],'')+(ls[1]?lineHTML(ls[1],''):'');
+  else if(S0.m==='inter')h=lineHTML(ls[i],'prev')+cd(S0.until)+lineHTML(ls[i+1],'')+(ls[i+2]?lineHTML(ls[i+2],''):'');
+  else if(S0.m==='fin')h='<div class="st-end">♪ Final</div>';
+  else{if(i>=1)h+=lineHTML(ls[i-1],'prev');h+=lineHTML(ls[i],'cur',sungEnd(ls,i));for(let k=i+1;k<=Math.min(ls.length-1,i+2);k++)h+=lineHTML(ls[k],'');}
+  return {h,S0};
+}
+function stageKeyOf(t){const v=stageView(),ls=stageLines(),ci=chordAt(t),bi=barInfo(t);let k=v;
+  if(v!=='acordes'&&ls&&ls.length){const S0=stageMode(ls,t);k+='|'+S0.i+'|'+S0.m;}
+  if(v!=='letra')k+='|'+ci+'|'+(bi&&v==='acordes'?bi.bar:'');return k;}
 function renderStageText(){
-  if(!stage)return;const t=curPos(),box=$('#stLyrics'),ls=stageLines();
-  if(ls&&ls.length){const S0=stageMode(ls,t),i=S0.i;stage.idx=i;stage.mode=S0.m;let h='';
-    const cd=u=>'<div class="st-inter">♪ '+(S0.m==='intro'?'Intro':'Interludio')+' <span id="stCd">'+(u-t>0?'— entra la voz en '+Math.ceil(u-t)+' s':'')+'</span></div>';
-    if(S0.m==='intro')h=cd(S0.until)+lineHTML(ls[0],'')+(ls[1]?lineHTML(ls[1],''):'');
-    else if(S0.m==='inter')h=lineHTML(ls[i],'prev')+cd(S0.until)+lineHTML(ls[i+1],'')+(ls[i+2]?lineHTML(ls[i+2],''):'');
-    else if(S0.m==='fin')h='<div class="st-end">♪ Final</div>';
-    else{if(i>=1)h+=lineHTML(ls[i-1],'prev');h+=lineHTML(ls[i],'cur',sungEnd(ls,i));for(let k=i+1;k<=Math.min(ls.length-1,i+2);k++)h+=lineHTML(ls[k],'');}
-    box.innerHTML=h;}
-  else{const ci=chordAt(t);stage.cidx=ci;const real=chordSegs.filter(c=>c.q!=='N');
-    if(!real.length){box.innerHTML='<div class="st-end">Sin acordes ni letra: analizá la tonalidad y cargá la letra.</div>';return;}
-    const cur=chordSegs[ci],ri=cur?real.indexOf(cur):-1,st=Math.max(0,Math.floor(Math.max(0,ri)/4)*4);
-    box.innerHTML='<div class="st-grid">'+real.slice(st,st+8).map(c=>'<span class="'+(c===cur?'on':'')+'">'+chordName(c.root,c.q)+'</span>').join('')+'</div>'+
-      '<div class="hint" style="font-size:18px;margin-top:20px">Cargá la letra en el Cancionero para verla acá con los acordes.</div>';}
+  if(!stage)return;const t=curPos(),box=$('#stLyrics'),ls=stageLines(),v=stageView();stage.key=stageKeyOf(t);
+  const vb=$('#stView');if(vb)vb.textContent=VIEWN[S.g.stageView||'auto'];
+  box.className='st-lyrics view-'+v;
+  if(v==='acordes'){box.innerHTML=chordsViewHTML(t);return;}
+  const L=lyricsHTML(ls,t);
+  if(v==='ambos'){const ci=chordAt(t);box.innerHTML='<div class="st-both"><div class="st-side">'+diagHTML(chordSegs[ci],true,'AHORA')+diagHTML(nextChord(ci),false,'SIGUE')+'</div><div class="st-lyr">'+L.h+'</div></div>';}
+  else box.innerHTML=L.h;
 }
 function updateStage(){
   const t=curPos(),D=totalDur()||1;
   $('#stTime').textContent=fmtS(t)+' / '+fmtS(D);$('#stProg i').style.width=Math.min(100,t/D*100)+'%';$('#stPlay').textContent=playing?'⏸':'▶';
-  const ci=chordAt(t),cur=chordSegs[ci];$('#stNow').textContent=cur&&cur.q!=='N'?chordName(cur.root,cur.q):'–';
-  let nx=null;for(let k=Math.max(0,ci+1);k<chordSegs.length;k++)if(chordSegs[k].q!=='N'&&(!cur||chordSegs[k].root!==cur.root||chordSegs[k].q!==cur.q)){nx=chordSegs[k];break;}
+  const ci=chordAt(t),cur=chordSegs[ci],nx=nextChord(ci);$('#stNow').textContent=cur&&cur.q!=='N'?chordName(cur.root,cur.q):'–';
   const left=nx?nx.t0-t:99,box=$('#stNext').parentElement;
   $('#stNext').textContent=nx?chordName(nx.root,nx.q):'–';$('#stNextLbl').textContent=nx&&left<4&&playing?'SIGUE EN '+Math.ceil(left):'SIGUE';box.classList.toggle('soon',!!nx&&left<1.5&&playing);
-  const ls=stageLines();
-  if(ls&&ls.length){const S0=stageMode(ls,t);if(S0.i!==stage.idx||S0.m!==stage.mode)renderStageText();
-    else if(S0.until!=null){const c=$('#stCd');if(c)c.textContent=S0.until-t>0?'— entra la voz en '+Math.ceil(S0.until-t)+' s':'';}
-    document.querySelectorAll('#stLyrics .sl.cur .w').forEach(w=>w.classList.toggle('done',+w.dataset.t<=t));}
-  else if(ci!==stage.cidx)renderStageText();
+  if(stageKeyOf(t)!==stage.key)renderStageText();
+  else{const ls=stageLines();if(ls&&ls.length&&stageView()!=='acordes'){const S0=stageMode(ls,t);if(S0.until!=null){const c=$('#stCd');if(c)c.textContent=S0.until-t>0?'— entra la voz en '+Math.ceil(S0.until-t)+' s':'';}}}
+  document.querySelectorAll('#stLyrics .sl.cur .w').forEach(w=>w.classList.toggle('done',+w.dataset.t<=t));
+  const bi=barInfo(t),bd=$('#stBeats');if(bi&&bd)[...bd.children].forEach((d,k)=>d.classList.toggle('on',k===bi.beat&&t>=S.g.beat0-0.05));
   const v=$('#stVideo');if(!v.hidden&&v.src){
     if(playing){if(v.paused){v.currentTime=t;v.play().catch(()=>{});}else if(Math.abs(v.currentTime-t)>0.3)v.currentTime=t;}
     else{if(!v.paused)v.pause();if(Math.abs(v.currentTime-t)>0.3)v.currentTime=t;}}
@@ -1907,9 +1957,10 @@ function stageAct(a){
   const t=curPos();
   if(a==='play')stagePlay();else if(a==='home')seekTo(0);else if(a==='back')seekTo(Math.max(0,t-5));else if(a==='fwd')seekTo(Math.min(totalDur(),t+5));
   else if(a==='next')nextSong();else if(a==='exit'){pause();closeStage();}
-  else if(a==='tm'||a==='tp'){transp=Math.max(-6,Math.min(6,transp+(a==='tp'?1:-1)));$('#selTransp').value=transp;renderKey();renderCanc();draw();stageHeader();renderStageText();}
+  else if(a==='tm'||a==='tp'){transp=Math.max(-6,Math.min(6,transp+(a==='tp'?1:-1)));$('#selTransp').value=transp;renderKey();renderCanc();draw();stageHeader();stage.key=null;renderStageText();}
   else if(a==='fm'||a==='fp'){S.g.stageFs=Math.max(24,Math.min(110,S.g.stageFs+(a==='fp'?6:-6)));save();$('#stage').style.setProperty('--fs',S.g.stageFs+'px');}
   else if(a==='kar'){S.g.karaoke=!S.g.karaoke;applyAll();stageHeader();}
+  else if(a==='view'){const o=['auto','letra','acordes','ambos'];S.g.stageView=o[(o.indexOf(S.g.stageView||'auto')+1)%o.length];save();renderStageText();}
 }
 $$('#stage [data-a]').forEach(b=>b.onclick=()=>stageAct(b.dataset.a));
 (()=>{let x0=null,y0=0;const L=$('#stLyrics');
@@ -1931,7 +1982,7 @@ function stageKey(e){
   if(k==='Escape'){stageAct('exit');return true;}
   return false;
 }
-$('#bStage').onclick=()=>openStage(false);
+$('#bStage').onclick=()=>openStage(false);$('#bStageTop').onclick=()=>openStage(false);
 $('#chkCount').checked=S.g.countIn!==false;$('#chkCount').onchange=e=>{S.g.countIn=e.target.checked;save();};
 
 /* =================== Repertorio (guardado en el navegador) =================== */
@@ -1961,7 +2012,7 @@ function renderSetlist(){
     el.appendChild(r);});
 }
 $('#bSaveSong').onclick=async()=>{
-  if(!trackBuf||!trackFile){msg('Cargá la pista del tema primero.',true);return;}
+  if(!trackBuf||!trackFile){if(takes.some(t=>t.on)){msg('Mezclando las tomas para guardar el tema…');await bounceToTrack();}if(!trackBuf||!trackFile){msg('Cargá la pista del tema primero.',true);return;}}
   parseLines();
   const old=setlist.find(x=>x.id===currentSongId);
   const rec={id:old?old.id:'t'+Date.now(),order:old?old.order:(setlist.length?Math.max(...setlist.map(x=>x.order))+1:0),
