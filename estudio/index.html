@@ -249,6 +249,15 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 #scoreOut svg{max-width:100%}
 @media print{body.print-score *{visibility:hidden!important}body.print-score #scoreOut,body.print-score #scoreOut *{visibility:visible!important}
   body.print-score #scoreOut{position:absolute;left:0;top:0;width:100%;padding:0}body.print-score{background:#fff}}
+
+.csteps{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.cstep{display:flex;gap:10px;background:#1a1d21;border:1px solid #0c0d0f;border-radius:6px;padding:10px;font-size:13px;line-height:1.5}
+.cstep>b{flex:0 0 28px;height:28px;border-radius:50%;background:var(--acc);color:#000;display:grid;place-items:center;font-size:15px}
+.cstep code{background:#06080a;padding:1px 5px;border-radius:3px;color:#9dff7a}
+.cbtn{display:inline-block;margin-top:6px;padding:7px 12px;border-radius:5px;background:linear-gradient(#3d434c,#2b3037);border:1px solid #14161a;color:var(--acc);text-decoration:none;font-weight:600;font-size:12px}
+.cbtn:hover{filter:brightness(1.2)}
+.ccfg{background:#06080a;border-radius:4px;padding:6px 8px;margin:6px 0;font-size:12px;line-height:1.7}
+#colabMode{margin:4px 0}
 </style>
 </head>
 <body>
@@ -349,6 +358,23 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
   </section>
 
   <div class="grid">
+    <section class="panel full" id="colabPanel">
+      <h2>☁️ Separar instrumentos, cambiar voz o sacar letra con Colab</h2>
+      <div class="csteps">
+        <div class="cstep"><b>1</b><div><b>Subí la canción</b> a la carpeta <code>canciones</code> de tu Drive (arrastrala a la ventana).<br><a class="cbtn" id="lkCanc" target="_blank" rel="noopener">📁 Abrir carpeta "canciones"</a></div></div>
+        <div class="cstep"><b>2</b><div><b>Abrí el cuaderno</b>, activá la GPU (<i>Entorno de ejecución → Cambiar tipo → T4</i>) y en la celda 1 elegí:
+          <select id="colabMode"><option value="sep">Solo separar instrumentos</option><option value="letra">Separar + sacar la letra</option><option value="voz">Poner MI voz en la canción</option></select>
+          <div class="ccfg" id="colabCfg"></div>
+          <a class="cbtn" id="lkNb" target="_blank" rel="noopener">▶️ Abrir el cuaderno en Colab</a> y tocá <i>Entorno de ejecución → Ejecutar todo</i> (Ctrl+F9).</div></div>
+        <div class="cstep"><b>3</b><div><b>Buscá el resultado</b> en <code>resultados/&lt;nombre de la canción&gt;/</code>: las pistas separadas están en <code>pistas_separadas</code>. Bajalas y cargalas acá con <b>📂 Cargar pistas separadas</b> (elegí todas juntas).<br><a class="cbtn" id="lkRes" target="_blank" rel="noopener">📂 Abrir carpeta "resultados"</a></div></div>
+      </div>
+      <details class="hint" style="margin-top:8px"><summary>Cambiar los links (si movés las carpetas o usás otra cuenta)</summary>
+        <div class="row">Cuaderno <input id="cfgNb" class="txin" style="flex:1;min-width:260px"></div>
+        <div class="row">Carpeta canciones <input id="cfgCanc" class="txin" style="flex:1;min-width:260px"></div>
+        <div class="row">Carpeta resultados <input id="cfgRes" class="txin" style="flex:1;min-width:260px"></div>
+      </details>
+    </section>
+
     <section class="panel full">
       <h2>▶️ Sacar acordes y letra de un video (YouTube u otra página)</h2>
       <div class="row">
@@ -2034,6 +2060,23 @@ async function finishCap(chunks,type){
     msg('Audio capturado: analizando tonalidad y acordes.');await analyzeKey();
   }catch(e){console.error(e);msg('No se pudo procesar la captura.',true);}
 }
+
+/* =================== Atajos a Colab =================== */
+const COLAB_DEF={nb:'https://colab.research.google.com/drive/13L7G63ypcVzxEa2Z8mlqvP6tBqu5jvpb',canc:'https://drive.google.com/drive/folders/1Rra6PrYa3hIcHYzomOAuS9JVQaV8oKRi',res:'https://drive.google.com/drive/folders/17tkXjgS5cFiC7LV4L_YWDCfDQPt-sFm0'};
+let COLAB=Object.assign({},COLAB_DEF);try{Object.assign(COLAB,JSON.parse(localStorage.getItem('estudioWillyColab')||'{}'));}catch(e){}
+const COLAB_CFG={
+  sep:[['ENTRENAR','no'],['CONVERTIR_VOZ','desmarcado ☐'],['TRANSCRIBIR_LETRA','desmarcado ☐'],['SEPARAR_INSTRUMENTOS','6 pistas']],
+  letra:[['ENTRENAR','no'],['CONVERTIR_VOZ','desmarcado ☐'],['TRANSCRIBIR_LETRA','marcado ☑'],['SEPARAR_INSTRUMENTOS','6 pistas']],
+  voz:[['ENTRENAR','auto (la primera vez entrena 1–3 h con tu voz de "dataset_mi_voz")'],['CONVERTIR_VOZ','marcado ☑'],['TONO','0 (o -12 si la canta una mujer)'],['SEPARAR_INSTRUMENTOS','el que quieras']]};
+function renderColab(){
+  $('#lkNb').href=COLAB.nb;$('#lkCanc').href=COLAB.canc;$('#lkRes').href=COLAB.res;
+  $('#cfgNb').value=COLAB.nb;$('#cfgCanc').value=COLAB.canc;$('#cfgRes').value=COLAB.res;
+  $('#colabCfg').innerHTML=COLAB_CFG[$('#colabMode').value].map(([k,v])=>'<div><code>'+k+'</code> → <b>'+esc(v)+'</b></div>').join('')+
+    ($('#colabMode').value==='voz'?'<div class="hint">Antes: subí 10–30 min de tu voz sin efectos (botón ⬇ Voz seca) a la carpeta <code>dataset_mi_voz</code>.</div>':'');
+}
+$('#colabMode').onchange=renderColab;
+['Nb','Canc','Res'].forEach(k=>$('#cfg'+k).onchange=e=>{COLAB[k.toLowerCase()]=e.target.value.trim()||COLAB_DEF[k.toLowerCase()];try{localStorage.setItem('estudioWillyColab',JSON.stringify(COLAB));}catch(_){}renderColab();});
+renderColab();
 
 /* =================== Teclado e inicio =================== */
 document.addEventListener('keydown',e=>{
