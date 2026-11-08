@@ -222,6 +222,9 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 
 .txin{background:#06080a;border:2px solid #050607;color:#e9ecef;border-radius:4px;padding:7px 9px;font:13px "Segoe UI",sans-serif}
 .txin:focus{outline:1px solid var(--acc)}
+
+.tempo{gap:6px;font-size:12px;color:var(--mut);margin:0 0 10px}
+.tempo select{font-size:12px}
 </style>
 </head>
 <body>
@@ -252,6 +255,14 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
         <button id="bDelCh" class="small">− Canal</button>
         <label class="file"><input type="file" id="fStems" accept="audio/*,video/*" multiple><button class="small" onclick="this.previousElementSibling.click()" title="Elegí varios archivos: cada uno va a su propio canal">📂 Cargar pistas separadas</button></label>
         <input type="file" id="fChan" accept="audio/*,video/*" multiple style="display:none">
+      </div>
+      <div class="row tempo">
+        <b style="font-size:11px;letter-spacing:1px">🥁 TEMPO</b><input id="bpm" class="txin" type="number" min="40" max="240" step="0.5" style="width:78px"> BPM
+        <button id="bTap" class="small" title="Tocá en cada tiempo mientras suena el tema">Tap</button><button id="bDetT" class="small">Detectar</button>
+        Compás <select id="meter"><option>4/4</option><option>3/4</option><option>6/8</option></select>
+        Desfase <button id="bB0m" class="small">◀</button><button id="bB0p" class="small">▶</button><button id="bOne" class="small" title="Correr el tiempo fuerte (el 1)">Cambiar el 1</button>
+        <button id="bRegen" class="small on">🎹 Regenerar instrumentos</button>
+        <input type="file" id="fSmp" accept="audio/*" style="display:none">
       </div>
       <div class="strips" id="strips"></div>
       <p class="hint">Armá con <b>● REC</b> los canales que querés grabar: se graban todos juntos. Con una interfaz de 2 entradas elegí "Entrada 1" y "Entrada 2" en cada canal (ej. voz y guitarra a la vez). Usá auriculares.</p>
@@ -378,11 +389,11 @@ function newCh(i,t){
   t=t||{};
   const c={name:t.name||('Canal '+(i+1)),color:COLORS[i%COLORS.length],preset:t.preset||'Seca (sin efectos)',
     gain:1,hp:80,eq:[0,0,0,0,0],compOn:true,thr:-18,ratio:3,rev:0.12,dly:0,pan:0,vol:0.9,
-    mute:false,solo:false,arm:i===0,mon:false,dev:'',inp:'mono'};
+    mute:false,solo:false,arm:i===0,mon:false,dev:'',inp:'mono',src:'audio',pat:''};
   const p=CH_PRESETS[c.preset];if(p)Object.keys(p).forEach(k=>c[k]=Array.isArray(p[k])?p[k].slice():p[k]);
   return c;
 }
-const DEFG={sevenths:true,stageFs:46,countIn:true,trackVol:0.8,trackMute:false,karaoke:false,revSize:2,dlyTime:0.32,dlyFb:0.3,monitorVol:0.8,latency:60,preroll:false,masterVol:0.9};
+const DEFG={bpm:0,beat0:0,meter:'4/4',sevenths:true,stageFs:46,countIn:true,trackVol:0.8,trackMute:false,karaoke:false,revSize:2,dlyTime:0.32,dlyFb:0.3,monitorVol:0.8,latency:60,preroll:false,masterVol:0.9};
 let S={g:Object.assign({},DEFG),ch:CH_TEMPLATES.map((t,i)=>newCh(i,t))};
 try{const s=JSON.parse(localStorage.getItem('estudioWilly3')||'null');if(s&&s.g&&Array.isArray(s.ch)&&s.ch.length){
   S.g=Object.assign({},DEFG,s.g);S.ch=s.ch.map((c,i)=>Object.assign(newCh(i),c,{arm:!!c.arm,solo:false}));}}catch(e){}
@@ -536,8 +547,12 @@ function stripCh(i){
     <div class="sname"><input type="text" value="${esc(c.name)}" data-name="${i}" title="Clic para renombrar"></div>
     <button class="small" data-load="${i}" style="width:100%" title="Cargar un archivo de audio en este canal">📂 Cargar audio</button>
     <select data-preset="${i}" title="Preset del canal">${preOpts}</select>
-    <select data-dev="${i}" title="Dispositivo de entrada">${devOpts}</select>
-    <select data-inp="${i}" title="Entrada de la interfaz">${inpOpts}</select>
+    <select data-src="${i}" title="Fuente del canal">${Object.keys(INSTR).map(k=>`<option value="${k}"${k===(c.src||'audio')?' selected':''}>${INSTR[k]}</option>`).join('')}</select>
+    ${(c.src||'audio')==='audio'?`<select data-dev="${i}" title="Dispositivo de entrada">${devOpts}</select>
+    <select data-inp="${i}" title="Entrada de la interfaz">${inpOpts}</select>`:
+    `<select data-pat="${i}" title="Ritmo">${Object.keys(PATS).map(k=>`<option value="${k}"${k===(c.pat||DEFPAT[c.src])?' selected':''}>${PATS[k]}</option>`).join('')}</select>
+    ${c.src==='sampler'?`<button class="small" data-smp="${i}" style="width:100%">${samplers[i]?'✓ Nota cargada':'🎛️ Cargar nota'}</button><select data-smproot="${i}" title="¿Qué nota es el sonido cargado?">${Array.from({length:25},(_,k)=>48+k).map(m=>`<option value="${m}"${m===(samplers[i]?samplers[i].root:60)?' selected':''}>Es ${NES[m%12]}${Math.floor(m/12)-1}</option>`).join('')}</select>`:''}
+    <button class="small on" data-gen="${i}" style="width:100%">🎹 Generar</button>`}
     <div class="ledh" id="inL${i}" title="Señal de entrada"></div>
     <div class="sec">ENTRADA</div>
     <div class="krow">${kn(p+'gain','Gain',0,3,0.01,'pct','red')}${kn(p+'hp','Low cut',20,300,1,'hz','wht')}</div>
@@ -592,6 +607,15 @@ function renderDesk(){
   el.querySelectorAll('[data-dev],[data-inp]').forEach(x=>x.addEventListener('change',async()=>{const i=+(x.dataset.dev??x.dataset.inp);
     if(x.dataset.dev!==undefined)S.ch[i].dev=x.value;else S.ch[i].inp=x.value;save();
     if(inputsOn){try{await connectInput(i);msg('Entrada del canal '+S.ch[i].name+' cambiada.');}catch(e){msg('No pude abrir esa entrada.',true);}}}));
+  el.querySelectorAll('[data-src]').forEach(x=>x.onchange=()=>{const i=+x.dataset.src,c=S.ch[i];c.src=x.value;c.pat=DEFPAT[c.src]||'';
+    if(c.src!=='audio'){c.arm=false;const pm={piano:'Piano / teclado',nylon:'Guitarra criolla',steel:'Guitarra acústica',bass:'Seca (sin efectos)',pad:'Voz balada',organ:'Piano / teclado',sampler:'Seca (sin efectos)'}[c.src];
+      const p=CH_PRESETS[pm];if(p){c.preset=pm;Object.keys(p).forEach(k=>c[k]=Array.isArray(p[k])?p[k].slice():p[k]);}
+      if(/^(Canal \d+|Mic 2|Voz|Guitarra|Piano|Piano|Guitarra criolla|Guitarra acero|Bajo|Cuerdas \(pad\)|Órgano|Sampler propio)$/.test(c.name))c.name=INSTR[c.src].replace(/^\S+\s/,'').slice(0,14);}
+    save();renderDesk();applyAll();if(c.src!=='audio'&&c.src!=='sampler'&&chordSegs.length)genInstrument(i);});
+  el.querySelectorAll('[data-pat]').forEach(x=>x.onchange=()=>{const i=+x.dataset.pat;S.ch[i].pat=x.value;save();if(chordSegs.length)genInstrument(i);});
+  el.querySelectorAll('[data-gen]').forEach(b=>b.onclick=()=>genInstrument(+b.dataset.gen));
+  el.querySelectorAll('[data-smp]').forEach(b=>b.onclick=()=>{smpTarget=+b.dataset.smp;$('#fSmp').click();});
+  el.querySelectorAll('[data-smproot]').forEach(x=>x.onchange=()=>{const i=+x.dataset.smproot;if(samplers[i])samplers[i].root=+x.value;else samplers[i]={buf:null,root:+x.value};});
   el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{chanTarget=+b.dataset.load;$('#fChan').click();});
   $('#fTrack').onchange=loadTrack;
   $('#bExpMix').onclick=()=>render('mix');$('#bBounce').onclick=bounceToTrack;$('#bExpCh').onclick=()=>render('canales');$('#bExpSeca').onclick=()=>render('seca');
@@ -659,6 +683,133 @@ async function bounceToTrack(){
   msg('La mezcla ahora es la PISTA (las tomas quedaron apagadas para que no suenen dos veces). Ya la podés usar en el escenario o guardarla en el repertorio.');
   if(!KEY)analyzeKey();
 }
+
+/* =================== Instrumentos virtuales =================== */
+const INSTR={audio:'🎤 Audio / micrófono',piano:'🎹 Piano',nylon:'🎸 Guitarra criolla',steel:'🎸 Guitarra acero',bass:'🎸 Bajo',pad:'🎻 Cuerdas (pad)',organ:'⛪ Órgano',sampler:'🎛️ Sampler propio'};
+const PATS={largo:'Acorde largo',negras:'Un golpe por tiempo',rasgueo:'Rasgueo',arpegio:'Arpegio',bajo:'Bajo: tónica y quinta'};
+const DEFPAT={piano:'negras',nylon:'rasgueo',steel:'rasgueo',bass:'bajo',pad:'largo',organ:'largo',sampler:'negras'};
+const noteCache=new Map(),samplers={};let smpTarget=0;
+function normPeak(y,p){let m=1e-9;for(const v of y)m=Math.max(m,Math.abs(v));const k=p/m;for(let i=0;i<y.length;i++)y[i]*=k;const f=Math.min(y.length,Math.floor(y.length*0.03));for(let i=0;i<f;i++)y[y.length-1-i]*=i/f;return y;}
+function ksNote(sr,midi,kind){ // cuerda pulsada (Karplus-Strong)
+  const f=440*Math.pow(2,(midi-69)/12),T=kind==='bass'?1.6:kind==='steel'?3.2:2.4,n=Math.floor(sr*(kind==='bass'?2:3.5)),y=new Float32Array(n);
+  const L=sr/f-0.5,N=Math.floor(L),fr=L-N,d=Math.pow(0.001,1/(f*T*Math.pow(261/f,0.25)));
+  for(let i=0;i<N+2&&i<n;i++)y[i]=Math.random()*2-1;
+  for(let k=0;k<(kind==='steel'?1:kind==='bass'?6:3);k++)for(let i=1;i<N+2&&i<n;i++)y[i]=0.5*(y[i]+y[i-1]);
+  for(let i=N+2;i<n;i++){const a=(1-fr)*y[i-N]+fr*y[i-N-1],b=(1-fr)*y[i-N-1]+fr*y[i-N-2];y[i]=d*0.5*(a+b);}
+  if(kind!=='steel'){let p=0;const a=kind==='bass'?0.35:0.55;for(let i=0;i<n;i++){p+=a*(y[i]-p);y[i]=p;}}
+  if(kind==='bass'){for(let i=0;i<n;i++){const t=i/sr;y[i]+=0.6*Math.sin(2*Math.PI*f*t)*Math.exp(-t*1.8)*Math.min(1,t*300);}}
+  return normPeak(y,0.6);
+}
+function pianoNote(sr,midi){
+  const f=440*Math.pow(2,(midi-69)/12),n=Math.floor(sr*3.5),y=new Float32Array(n),B=0.00035;
+  for(let k=1;k<=12;k++){const fk=k*f*Math.sqrt(1+B*k*k);if(fk>sr/2.3)break;const a=(k===1?1:0.75)/Math.pow(k,1.15),dk=(0.7+0.4*k)*Math.pow(f/261,0.45),
+    w=2*Math.PI*fk/sr,cw=Math.cos(w),sw=Math.sin(w),ed=Math.exp(-dk/sr);let s=Math.sin(Math.random()*6.28),c=Math.cos(Math.asin(s)),e=a;
+    for(let i=0;i<n;i++){y[i]+=e*s;const ns=s*cw+c*sw;c=c*cw-s*sw;s=ns;e*=ed;}}
+  for(let i=0;i<n;i++){const t=i/sr;y[i]*=Math.min(1,t*400);if(t<0.02)y[i]+=(Math.random()*2-1)*0.08*(1-t/0.02);}
+  return normPeak(y,0.6);
+}
+function noteBuf(src,midi,sr){const k=src+':'+midi+':'+sr;if(noteCache.has(k))return noteCache.get(k);
+  const y=src==='piano'?pianoNote(sr,midi):ksNote(sr,midi,src);const b=new AudioBuffer({length:y.length,numberOfChannels:1,sampleRate:sr});b.copyToChannel(y,0);noteCache.set(k,b);return b;}
+const inWin=(pc,lo)=>lo+md(pc-lo);
+function voicing(src,root,q){
+  const pcs=QI[q].map(iv=>md(root+iv));
+  if(src==='nylon'||src==='steel'){const sh=shapeOf(root,q);return {notes:sh.map((f,s)=>f<0?null:TUNE[s]+f).filter(v=>v!=null),bass:null};}
+  if(src==='bass'){const r=28+md(root-4);return {notes:[r],bass:r,fifth:r+7};}
+  if(src==='pad'||src==='organ'){return {notes:[43+md(root-7)].concat(pcs.map(pc=>inWin(pc,55)).sort((a,b)=>a-b)),bass:43+md(root-7)};}
+  const b=40+md(root-4);return {notes:pcs.map(pc=>inWin(pc,60)).sort((a,b)=>a-b),bass:b,fifth:b+7};
+}
+function patternSteps(p,m){const n=m==='4/4'?8:6,a=new Array(n).fill('');
+  if(p==='largo')a[0]='H';
+  else if(p==='negras'){(m==='4/4'?[0,2,4,6]:m==='3/4'?[0,2,4]:[0,3]).forEach(k=>a[k]='H');}
+  else if(p==='rasgueo'){const r=m==='4/4'?['D','','D','U','','U','D','U']:m==='3/4'?['D','','D','U','D','U']:['D','','U','D','','U'];r.forEach((v,k)=>a[k]=v);}
+  else if(p==='arpegio')a.fill('A');
+  else if(p==='bajo'){a[0]='B';if(m==='4/4')a[4]='F';else if(m==='6/8')a[3]='F';else a[4]='F';}
+  return a;}
+function buildEvents(src,pat,segs){
+  const m=S.g.meter||'4/4',sub=m==='6/8'?3:2,bpb=m==='3/4'?3:m==='6/8'?2:4,beat=60/S.g.bpm,step=beat/sub,n=bpb*sub,P=patternSteps(pat,m);
+  const t0=segs[0].t0,tEnd=segs[segs.length-1].t1,ev=[];let g0=S.g.beat0;while(g0>t0-0.01)g0-=n*step;
+  let last=null;
+  for(let k=0;;k++){const t=g0+k*step;if(t>=tEnd)break;if(t<t0-0.06)continue;
+    const ci=chordAt(t+0.03),sg=chordSegs[ci];if(!sg||sg.q==='N'){last=null;continue;}
+    const key=sg.root+sg.q,code=P[((k%n)+n)%n],chg=key!==last;
+    if(code)ev.push({t,code,root:sg.root,q:sg.q,k,acc:((k%n)+n)%n===0});
+    else if(chg&&(pat==='largo'||pat==='negras'||pat==='bajo'))ev.push({t,code:pat==='bajo'?'B':'H',root:sg.root,q:sg.q,k,acc:true});
+    last=key;}
+  ev.forEach((e,j)=>{const nx=ev[j+1];e.d=Math.max(0.08,(nx?nx.t:e.t+2)-e.t);});
+  return ev;
+}
+function playNote(oc,out,src,midi,t,d,vel,ch){
+  if(t<0)return;const g=oc.createGain();g.connect(out);
+  if(src==='pad'){const lp=oc.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1800;lp.connect(g);
+    [-7,7].forEach(dt=>{const o=oc.createOscillator();o.type='sawtooth';o.frequency.value=440*Math.pow(2,(midi-69)/12);o.detune.value=dt;o.connect(lp);o.start(t);o.stop(t+d+0.6);});
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.05*vel,t+0.25);g.gain.setValueAtTime(0.05*vel,t+Math.max(0.26,d));g.gain.linearRampToValueAtTime(0,t+d+0.5);return;}
+  if(src==='organ'){const o=oc.createOscillator();o.setPeriodicWave(organWave(oc));o.frequency.value=440*Math.pow(2,(midi-69)/12);o.connect(g);o.start(t);o.stop(t+d+0.15);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.07*vel,t+0.01);g.gain.setValueAtTime(0.07*vel,t+d);g.gain.linearRampToValueAtTime(0,t+d+0.1);return;}
+  const s=oc.createBufferSource();
+  if(src==='sampler'){const sp=samplers[ch];s.buffer=sp.buf;s.playbackRate.value=Math.pow(2,(midi-sp.root)/12);}else s.buffer=noteBuf(src,midi,oc.sampleRate);
+  s.connect(g);const gain={piano:0.33,nylon:0.42,steel:0.36,bass:0.6,sampler:0.4}[src]*vel;g.gain.setValueAtTime(gain,t);
+  const rel=src==='piano'||src==='sampler'?0.12:0.05;g.gain.setTargetAtTime(0,t+d,rel);s.start(t);s.stop(t+d+rel*6);
+}
+let _organ=null;function organWave(oc){return oc.createPeriodicWave(new Float32Array(9),new Float32Array([0,1,0.8,0.45,0.25,0.3,0,0.15,0.12]));}
+function playEvent(oc,out,src,e,ch){
+  const v=voicing(src,e.root,e.q),hum=()=>(Math.random()-0.5)*0.012,vel=(e.acc?1.08:0.92)*(0.92+Math.random()*0.16);
+  const c=e.code;
+  if(src==='bass'){const m=c==='F'?v.fifth:v.bass;if(c==='U')return;playNote(oc,out,src,m,e.t+hum(),e.d,vel,ch);return;}
+  if(c==='B'||c==='F'){const m=c==='F'?(v.fifth||v.notes[0]+7):(v.bass||v.notes[0]);playNote(oc,out,src,m,e.t+hum(),e.d,vel,ch);return;}
+  if(c==='A'){const ns=(v.bass?[v.bass]:[]).concat(v.notes),L=ns.length,seq=L>1?ns.concat(ns.slice(1,-1).reverse()):ns,m=seq[e.k%seq.length];
+    playNote(oc,out,src,m,e.t+hum(),Math.max(e.d,0.6),vel*0.85,ch);return;}
+  let ns=v.notes.slice();if(c==='H'&&v.bass&&src!=='pad'&&src!=='organ')ns=[v.bass].concat(ns);
+  if(c==='U')ns=ns.slice(-4).reverse();
+  const gap=(src==='nylon'||src==='steel')?(c==='U'?0.009:0.014):0.004;
+  ns.forEach((m,j)=>playNote(oc,out,src,m,e.t+j*gap+hum()*0.3,e.d,vel*(c==='U'?0.7:1),ch));
+}
+async function estimateTempo(){
+  const SR=11025,src=await monoOf(SR);if(!src)return false;const x=src.data,H=128,W=256,nF=Math.floor((x.length-W)/H);if(nF<200)return false;
+  const env=new Float32Array(nF);let prev=0;for(let f=0;f<nF;f++){let s=0;for(let i=0;i<W;i++){const v=x[f*H+i];s+=v*v;}const e=Math.log1p(100*Math.sqrt(s/W));env[f]=Math.max(0,e-prev);prev=e;}
+  const fps=SR/H,M=Math.round(fps*0.4),on=new Float32Array(nF);let acc=0;for(let f=0;f<nF;f++){acc+=env[f];if(f>=M)acc-=env[f-M];on[f]=Math.max(0,env[f]-acc/Math.min(f+1,M));}
+  let best={s:-1,bpm:100};
+  for(let bpm=55;bpm<=190;bpm+=0.5){const lag=60/bpm*fps;let s=0;for(let f=0;f+2*lag+1<nF;f++){const a=f+lag,i=Math.floor(a),fr=a-i,b=f+2*lag,j=Math.floor(b),gr=b-j;
+      s+=on[f]*((1-fr)*on[i]+fr*on[i+1])+0.5*on[f]*((1-gr)*on[j]+gr*on[j+1]);}
+    s*=Math.exp(-0.5*Math.pow(Math.log2(bpm/105)/0.9,2));if(s>best.s)best={s,bpm};}
+  const lag=60/best.bpm*fps;let ph={s:-1,p:0};for(let p=0;p<lag;p+=0.5){let s=0;for(let k=0;p+k*lag<nF;k++)s+=on[Math.round(p+k*lag)]||0;if(s>ph.s)ph={s,p};}
+  const bt=60/best.bpm;let b0=ph.p/fps+src.offset;const c0=chordSegs.find(c=>c.q!=='N');if(c0){const k=Math.round((c0.t0-b0)/bt);b0=b0+k*bt;}
+  // el "1": la fase del compás donde caen más cambios de acorde
+  const bpb=S.g.meter==='3/4'?3:S.g.meter==='6/8'?2:4,bar=bpb*bt,chg=chordSegs.filter((c,k)=>k>0&&c.q!=='N').map(c=>c.t0);
+  if(chg.length>=2){let bj={s:-1,j:0};for(let j=0;j<bpb;j++){const o=b0+j*bt;let sc=0;chg.forEach(t=>{let r=((t-o)%bar+bar)%bar;r=Math.min(r,bar-r);sc+=Math.exp(-Math.pow(r/(bt*0.35),2));});if(sc>bj.s)bj={s:sc,j};}b0+=bj.j*bt;}
+  S.g.bpm=Math.round(best.bpm*2)/2;S.g.beat0=b0;save();syncTempoUI();draw();return true;
+}
+function syncTempoUI(){const b=$('#bpm');if(b)b.value=S.g.bpm||'';const m=$('#meter');if(m)m.value=S.g.meter||'4/4';}
+async function genInstrument(i,quiet){
+  const c=S.ch[i];if(!c||c.src==='audio')return;
+  const segs=chordSegs.filter(x=>x.q!=='N');if(!segs.length){msg('Primero hacen falta los acordes: cargá la pista y analizá la tonalidad.',true);return;}
+  if(c.src==='sampler'&&!(samplers[i]&&samplers[i].buf)){msg('Cargá una nota para el sampler propio (botón 🎛️ Cargar nota).',true);return;}
+  initCtx();if(!(S.g.bpm>0)){msg('Detectando el tempo…');if(!(await estimateTempo())){msg('No pude detectar el tempo: escribilo o usá Tap.',true);return;}}
+  if(!quiet)msg('Generando '+INSTR[c.src]+'…');await new Promise(r=>setTimeout(r,20));
+  const sr=ctx.sampleRate,end=segs[segs.length-1].t1+3,oc=new OfflineAudioContext(2,Math.ceil(end*sr),sr),out=oc.createGain();out.connect(oc.destination);
+  const pat=c.pat||DEFPAT[c.src];buildEvents(c.src,pat,segs).forEach(e=>playEvent(oc,out,c.src,e,i));
+  const buf=await oc.startRendering();let pk=1e-9;for(let k=0;k<2;k++){const d=buf.getChannelData(k);for(let j=0;j<d.length;j+=4)pk=Math.max(pk,Math.abs(d[j]));}
+  const sc=0.7/pk;for(let k=0;k<2;k++){const d=buf.getChannelData(k);for(let j=0;j<d.length;j++)d[j]*=sc;}
+  const was=playing;if(was)pause();
+  takes=takes.filter(t=>!(t.ch===i&&t.gen));takes.push({id:++takeCount,ch:i,name:INSTR[c.src].replace(/^\S+\s/,'')+' · '+PATS[pat],buf,start:0,on:true,gen:true});
+  renderTakes();draw();if(was)play();
+  if(!quiet)msg(INSTR[c.src].replace(/^\S+\s/,'')+' listo ('+PATS[pat]+', '+S.g.bpm+' BPM '+S.g.meter+'). Si no va a tiempo, ajustá el tempo o el desfase y tocá "Regenerar".');
+}
+async function regenAll(){const ids=S.ch.map((c,i)=>c.src&&c.src!=='audio'?i:-1).filter(i=>i>=0);if(!ids.length){msg('No hay canales con instrumento. Elegí uno en el selector de fuente de un canal.',true);return;}
+  for(const i of ids)await genInstrument(i,true);msg('Instrumentos regenerados ('+S.g.bpm+' BPM, '+S.g.meter+').');}
+$('#fSmp').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const b=await decodeFile(f);
+  const root=samplers[smpTarget]?samplers[smpTarget].root:60;samplers[smpTarget]={buf:trimBuffer(b,leadingSilence(b)),root};renderDesk();msg('Nota cargada en el sampler. Indicá qué nota es y tocá "Generar".');}catch(err){msg('No se pudo leer el sonido.',true);}};
+let taps=[];
+$('#bTap').onclick=()=>{const now=performance.now();taps=taps.filter(t=>now-t<3000);taps.push(now);
+  if(taps.length>=3){const iv=(taps[taps.length-1]-taps[0])/(taps.length-1);S.g.bpm=Math.round(60000/iv*2)/2;if(playing)S.g.beat0=curPos()-(ctx.outputLatency||0.02);save();syncTempoUI();draw();msg('Tempo: '+S.g.bpm+' BPM'+(playing?' (el último toque marca un tiempo fuerte)':'')+'.');}
+  else msg('Seguí tocando "Tap" en cada tiempo…');};
+$('#bDetT').onclick=async()=>{msg('Detectando el tempo…');if(await estimateTempo())msg('Tempo detectado: '+S.g.bpm+' BPM. Revisalo con "Tap" si te parece el doble o la mitad.');else msg('Falta una pista o tomas para detectar el tempo.',true);};
+$('#bpm').onchange=e=>{S.g.bpm=+e.target.value||0;save();draw();};
+$('#meter').onchange=e=>{S.g.meter=e.target.value;save();draw();};
+$('#bB0m').onclick=()=>{S.g.beat0-=0.02;save();draw();msg('Desfase −20 ms: tocá "Regenerar".');};
+$('#bB0p').onclick=()=>{S.g.beat0+=0.02;save();draw();msg('Desfase +20 ms: tocá "Regenerar".');};
+$('#bOne').onclick=()=>{if(S.g.bpm>0){S.g.beat0+=60/S.g.bpm;save();draw();msg('El tiempo fuerte se corrió un tiempo: tocá "Regenerar".');}};
+$('#bRegen').onclick=regenAll;
+syncTempoUI();
 
 /* =================== Transporte =================== */
 const totalDur=()=>Math.max(trackBuf?trackBuf.duration:0,...takes.map(t=>t.start+t.buf.duration),0);
@@ -780,6 +931,8 @@ function draw(){
   const g=tl.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,W,H);
   const vd=viewDur(),x=t=>t/vd*W;g.fillStyle='#6b737d';g.font='10px system-ui';
   const stepT=vd>240?30:vd>90?10:5;for(let t=0;t<vd;t+=stepT){g.fillRect(x(t),0,1,6);g.fillText(fmtS(t),x(t)+3,13);}
+  if(S.g.bpm>0){const bt=60/S.g.bpm,bpb=S.g.meter==='3/4'?3:S.g.meter==='6/8'?2:4;if(W/(vd/bt)>3){let b0=S.g.beat0;while(b0>bt)b0-=bt;
+    for(let k=0,t=b0;t<vd;k++,t=b0+k*bt){if(t<0)continue;const isBar=Math.round((t-S.g.beat0)/bt)%bpb===0;g.fillStyle=isBar?'#f2b33d':'#3a4048';g.fillRect(x(t),isBar?14:17,1,isBar?8:5);}g.fillStyle='#6b737d';}}
   let y=22;
   L.forEach((l,i)=>{
     g.fillStyle=i%2?'#0d0f12':'#0a0c0e';g.fillRect(0,y,W,l.h);
