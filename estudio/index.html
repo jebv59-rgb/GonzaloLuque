@@ -219,6 +219,9 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 .tedit .vtx{width:100%;background:#06080a;border:1px solid #2d333b;color:#e9ecef;border-radius:3px;padding:5px 7px;font:13px "Segoe UI",sans-serif}
 .tedit .vtx:focus{outline:1px solid var(--acc)}
 .tedit td button.small{padding:3px 6px;margin-right:2px}
+
+.txin{background:#06080a;border:2px solid #050607;color:#e9ecef;border-radius:4px;padding:7px 9px;font:13px "Segoe UI",sans-serif}
+.txin:focus{outline:1px solid var(--acc)}
 </style>
 </head>
 <body>
@@ -264,6 +267,19 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
   </div>
 
   <div class="grid">
+    <section class="panel full">
+      <h2>▶️ Sacar acordes y letra de un video (YouTube u otra página)</h2>
+      <div class="row">
+        <input id="ytUrl" class="txin" style="flex:2;min-width:240px" placeholder="Pegá el link del video de YouTube…">
+        <input id="ytName" class="txin" style="flex:1;min-width:160px" placeholder="Nombre del tema (opcional)">
+        <button id="bYtOpen" class="small">1) Abrir video</button>
+        <button id="bYtCap">2) 🔴 Capturar audio</button>
+      </div>
+      <div class="ledh" id="ytL" style="max-width:320px"></div>
+      <div class="hint" id="ytStat"></div>
+      <p class="hint">Cómo funciona: el estudio graba el sonido de la pestaña mientras el video se reproduce (como grabar de la radio). Al tocar "Capturar audio" elegí la <b>pestaña</b> del video, dejá activado <b>"Compartir audio de la pestaña"</b>, dale play al video desde el principio y al final tocá "Terminar captura". Después se analizan solos la tonalidad y los acordes, y queda como pista para cantar, guardar en el repertorio o transcribir la letra. Funciona en Chrome o Edge de computadora (no en tablet/celular). Usalo para práctica y shows en vivo; no publiques las grabaciones de otros artistas.</p>
+    </section>
+
     <section class="panel full">
       <h2>Repertorio · modo escenario (en vivo)</h2>
       <div class="row">
@@ -596,7 +612,7 @@ $('#bDelCh').onclick=()=>{
 async function decodeFile(file){initCtx();return await ctx.decodeAudioData(await file.arrayBuffer());}
 async function loadTrack(e){
   const f=e.target.files[0];if(!f)return;msg('Cargando pista…');
-  try{stop();trackBuf=await decodeFile(f);trackName=f.name;pos=0;setTrackFile(f);currentSongId=null;renderSetlist();
+  try{stop();trackBuf=await decodeFile(f);trackTrim=0;trackName=f.name;pos=0;setTrackFile(f);currentSongId=null;renderSetlist();
     if(manual.text&&setlist.some(x=>x.manualText===manual.text)){manual.text='';try{localStorage.setItem('estudioWillyLetra','');}catch(_){}}manual.lines=null;manual.off=0;$('#trackName').textContent=f.name+' · '+fmtS(trackBuf.duration);
     msg('Pista lista. ▶ para escuchar, ● REC para grabar encima.');peaksCache.clear();KEY=null;chordSegs=[];melody=null;lyrics=null;draw();renderCanc();analyzeKey();}
   catch(err){msg('No se pudo leer el archivo de audio.',true);}
@@ -1197,6 +1213,10 @@ $('#bSong').onclick=()=>{
 
 
 /* =================== Modo escenario =================== */
+let trackTrim=0;
+function trimBuffer(buf,secs){if(!secs||secs<=0)return buf;const st=Math.floor(secs*buf.sampleRate),len=buf.length-st;if(len<buf.sampleRate)return buf;
+  const o=ctx.createBuffer(buf.numberOfChannels,len,buf.sampleRate);for(let c=0;c<buf.numberOfChannels;c++)o.copyToChannel(buf.getChannelData(c).subarray(st),c);return o;}
+function leadingSilence(buf){const d=buf.getChannelData(0),sr=buf.sampleRate,th=0.01;for(let i=0;i<d.length;i++)if(Math.abs(d[i])>th)return Math.max(0,i/sr-0.3);return 0;}
 let stage=null,trackFile=null,trackVideoURL=null,currentSongId=null,setlist=[],wakeLock=null,countTimer=null;
 function setTrackFile(f){trackFile=f;if(trackVideoURL){URL.revokeObjectURL(trackVideoURL);trackVideoURL=null;}
   if(f&&(f.type||'').startsWith('video'))trackVideoURL=URL.createObjectURL(f);}
@@ -1337,7 +1357,7 @@ $('#bSaveSong').onclick=async()=>{
   parseLines();
   const old=setlist.find(x=>x.id===currentSongId);
   const rec={id:old?old.id:'t'+Date.now(),order:old?old.order:(setlist.length?Math.max(...setlist.map(x=>x.order))+1:0),
-    name:old?old.name:(trackName||'Tema').replace(/\.[^.]+$/,''),fileName:trackName,blob:trackFile,isVideo:!!trackVideoURL,
+    name:old?old.name:(trackName||'Tema').replace(/\.[^.]+$/,''),fileName:trackName,trim:trackTrim,blob:trackFile,isVideo:!!trackVideoURL,
     manualText:manual.text,manualLines:manual.lines,lyrOff:manual.off||0,lyrics,chordSegs,KEY,transp,capoSel,savedAt:Date.now()};
   try{await DB.put(rec);currentSongId=rec.id;try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
     await refreshSet();msg((old?'Tema actualizado':'Tema guardado')+' en el repertorio: '+rec.name);}
@@ -1345,7 +1365,7 @@ $('#bSaveSong').onclick=async()=>{
 };
 async function loadSong(x){
   try{msg('Cargando "'+x.name+'"…');stop();initCtx();
-    trackBuf=await ctx.decodeAudioData(await x.blob.arrayBuffer());trackName=x.fileName||x.name;setTrackFile(x.blob);currentSongId=x.id;pos=0;
+    trackTrim=x.trim||0;trackBuf=trimBuffer(await ctx.decodeAudioData(await x.blob.arrayBuffer()),trackTrim);trackName=x.fileName||x.name;setTrackFile(x.blob);currentSongId=x.id;pos=0;
     chordSegs=x.chordSegs||[];KEY=x.KEY||null;transp=x.transp||0;capoSel=x.capoSel||0;lyrics=x.lyrics||null;melody=null;
     manual={text:x.manualText||'',lines:x.manualLines||null,off:x.lyrOff||0};try{localStorage.setItem('estudioWillyLetra',manual.text);}catch(e){}
     $('#selTransp').value=transp;$('#trackName').textContent=trackName+' · '+fmtS(trackBuf.duration);
@@ -1387,6 +1407,51 @@ $('#fSet').onchange=async e=>{
     await refreshSet();msg('Importados '+n+' temas al repertorio.');}
   catch(err){console.error(err);msg('Ese archivo no es un repertorio válido de Estudio Willy.',true);}
 };
+
+/* =================== Capturar audio de un video (YouTube u otra pestaña) =================== */
+let cap=null;
+bindControls($('#ytL').parentElement);
+const ytId=u=>{const m=String(u).match(/(?:youtu\.be\/|[?&]v=|shorts\/|embed\/|live\/)([\w-]{11})/);return m?m[1]:null;};
+$('#bYtOpen').onclick=()=>{const u=$('#ytUrl').value.trim();if(!u){msg('Pegá el link del video.',true);return;}
+  const id=ytId(u),url=id?'https://www.youtube.com/watch?v='+id:(/^https?:\/\//.test(u)?u:null);if(!url){msg('Ese link no parece válido.',true);return;}
+  window.open(url,'_blank');$('#ytStat').textContent='Ahora: pausá el video al principio, volvé a esta pestaña y tocá "2) Capturar audio".';};
+$('#bYtCap').onclick=async()=>{
+  if(cap){stopCap();return;}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){msg('Este navegador no permite capturar audio de otra pestaña. Usá Chrome o Edge en una computadora.',true);return;}
+  let st;try{st=await navigator.mediaDevices.getDisplayMedia({video:true,audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},selfBrowserSurface:'exclude',systemAudio:'include',surfaceSwitching:'exclude'});}
+  catch(e){msg('Captura cancelada.',true);return;}
+  const at=st.getAudioTracks();if(!at.length){st.getTracks().forEach(t=>t.stop());msg('No se compartió el audio: elegí la PESTAÑA del video y dejá activado "Compartir audio de la pestaña".',true);return;}
+  initCtx();ctx.resume();stop();
+  const as=new MediaStream(at),mime=['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m))||'';
+  const rec=new MediaRecorder(as,mime?{mimeType:mime,audioBitsPerSecond:192000}:{}),chunks=[];
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+  const src=ctx.createMediaStreamSource(as),an=ctx.createAnalyser();an.fftSize=1024;src.connect(an);
+  cap={st,rec,chunks,src,an,t0:Date.now(),heard:false};
+  rec.onstop=()=>finishCap(chunks,rec.mimeType||mime||'audio/webm');
+  st.getTracks().forEach(t=>t.onended=()=>stopCap());
+  rec.start(1000);
+  $('#bYtCap').textContent='⏹ Terminar captura';$('#bYtCap').classList.add('on');
+  cap.iv=setInterval(()=>{if(!cap)return;const l=lvl(cap.an);if(l>0.02)cap.heard=true;const sec=(Date.now()-cap.t0)/1000;
+    $('#ytStat').textContent='🔴 Grabando '+fmtS(sec)+(cap.heard?' · se escucha audio ✓':' · dale play al video…')+' — al terminar el tema tocá "Terminar captura".';
+    setM('ytL',l);},250);
+  msg('Capturando: andá a la pestaña del video y dale play desde el principio.');
+};
+function stopCap(){if(!cap)return;const c=cap;cap=null;clearInterval(c.iv);try{if(c.rec.state!=='inactive')c.rec.stop();}catch(e){}
+  c.st.getTracks().forEach(t=>t.stop());try{c.src.disconnect();}catch(e){}$('#bYtCap').textContent='2) 🔴 Capturar audio';$('#bYtCap').classList.remove('on');setM('ytL',0);}
+async function finishCap(chunks,type){
+  const blob=new Blob(chunks,{type});if(blob.size<20000){msg('No se capturó audio suficiente. Probá de nuevo.',true);$('#ytStat').textContent='';return;}
+  try{$('#ytStat').textContent='Procesando la captura…';
+    const u=$('#ytUrl').value.trim(),id=ytId(u),nm=($('#ytName').value.trim()||('Video '+(id||new Date().toLocaleDateString('es-AR'))));
+    const f=new File([blob],nm+(type.includes('mp4')?'.m4a':'.webm'),{type});
+    const full=await ctx.decodeAudioData(await blob.arrayBuffer());
+    trackTrim=leadingSilence(full);trackBuf=trimBuffer(full,trackTrim);
+    trackName=f.name;pos=0;setTrackFile(f);currentSongId=null;renderSetlist();
+    if(manual.text&&setlist.some(x=>x.manualText===manual.text)){manual.text='';}manual.lines=null;manual.off=0;lyrics=null;melody=null;KEY=null;chordSegs=[];
+    $('#trackName').textContent=f.name+' · '+fmtS(trackBuf.duration);peaksCache.clear();draw();renderCanc();
+    $('#ytStat').textContent='✓ Capturado ('+fmtS(trackBuf.duration)+'). Analizando acordes… Para la letra: pegala (suele estar en la descripción del video) o transcribila en el Cancionero.';
+    msg('Audio capturado: analizando tonalidad y acordes.');await analyzeKey();
+  }catch(e){console.error(e);msg('No se pudo procesar la captura.',true);}
+}
 
 /* =================== Teclado e inicio =================== */
 document.addEventListener('keydown',e=>{
