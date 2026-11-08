@@ -243,6 +243,12 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
 #pr{display:block;width:100%;cursor:crosshair;touch-action:none}
 .prbar{gap:6px;font-size:12px;color:var(--mut)}
 .smpbox[hidden],#iBody[hidden],#iAudioMsg[hidden]{display:none!important}
+
+#scoreBox{margin-top:12px}
+#scoreOut{background:#fff;border-radius:6px;padding:10px;color:#000}
+#scoreOut svg{max-width:100%}
+@media print{body.print-score *{visibility:hidden!important}body.print-score #scoreOut,body.print-score #scoreOut *{visibility:visible!important}
+  body.print-score #scoreOut{position:absolute;left:0;top:0;width:100%;padding:0}body.print-score{background:#fff}}
 </style>
 </head>
 <body>
@@ -309,6 +315,10 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
         es la nota <select id="iSmpRoot"></select><button class="small" id="iSmpTest">▶ Probar</button></span>
     </div>
     <div id="iAudioMsg" class="hint">Este canal es de <b>audio</b> (micrófono o archivo). Para convertirlo en instrumento elegí uno en "Instrumento": piano, guitarras, bajo, cuerdas, órgano o <b>sampler propio</b> (un sonido tuyo).</div>
+    <div class="isecs" style="grid-template-columns:1fr">
+        <div class="isec"><b>4 · Audio → notas</b><span class="hint">Escucha un audio (pista o toma) y escribe sus notas en el canal elegido: si es de audio, lo convierte en piano.</span>
+          <div class="row"><select id="a2nSrc"></select><select id="a2nMode"><option value="mel">Melodía (una voz: canto, flauta, punteo)</option><option value="poly">Varias notas a la vez (piano, guitarra) · IA</option></select><button class="small on" id="a2nGo">🎼 Pasar a notas</button></div></div>
+    </div>
     <div id="iBody">
       <div class="isecs">
         <div class="isec"><b>1 · Acompañamiento automático</b><span class="hint">Toca solo los acordes del tema, al tempo de arriba.</span>
@@ -318,7 +328,7 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
             <label class="chk" style="margin:0"><input type="checkbox" id="iKeys" checked> Teclado de la PC</label>
             Octava <button class="small" id="iOctD">−</button><b id="iOct">4</b><button class="small" id="iOctU">+</button></div></div>
         <div class="isec"><b>3 · Partitura MIDI</b><span class="hint">Cargá un .mid y lo toca con este instrumento.</span>
-          <div class="row"><label class="file"><input type="file" id="fMidi" accept=".mid,.midi,audio/midi"><button class="small" onclick="this.previousElementSibling.click()">⬆ Importar MIDI</button></label><button class="small" id="iMidiExp">⬇ Exportar MIDI</button></div></div>
+          <div class="row"><label class="file"><input type="file" id="fMidi" accept=".mid,.midi,audio/midi"><button class="small" onclick="this.previousElementSibling.click()">⬆ Importar MIDI</button></label><button class="small" id="iMidiExp">⬇ Exportar MIDI</button><button class="small on" id="iScore">📜 Ver partitura</button></div></div>
       </div>
       <div id="kbd" class="kbd"></div>
       <div class="row prbar">
@@ -329,6 +339,11 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
         <button class="small" id="iClear">🗑 Borrar todas</button><span class="hint" id="iInfo" style="margin:0"></span>
       </div>
       <div id="prWrap"><canvas id="pr"></canvas></div>
+      <div id="scoreBox" hidden>
+        <div class="row"><b style="font-size:12px">📜 Partitura</b><button class="small" id="scorePrint">🖨 Imprimir / PDF</button><button class="small" id="scoreAbc">⬇ Descargar ABC</button><button class="small" id="scoreClose">✕ Cerrar</button>
+          <span class="hint" style="margin:0">Se arma con el tempo, el compás y la tonalidad de arriba. Corregí las notas en el editor y volvé a tocar "Ver partitura".</span></div>
+        <div id="scoreOut"></div>
+      </div>
       <p class="hint">Clic en un lugar vacío = nueva nota (arrastrá para alargarla) · arrastrá una nota para moverla, o su borde derecho para cambiar la duración · doble clic o clic derecho = borrar · Supr = borrar la seleccionada · rueda = subir/bajar notas, Shift+rueda = avanzar en el tiempo, Ctrl+rueda = zoom · clic arriba (en los acordes) = ir a ese momento. Teclado de la PC: A W S E D F T G Y H U J K = Do a Do, Z/X cambia de octava.</p>
     </div>
   </section>
@@ -901,7 +916,7 @@ function renderInst(){
     $('#iSmpRoot').innerHTML=Array.from({length:37},(_,k)=>36+k).map(m=>`<option value="${m}"${m===(sp?sp.root:60)?' selected':''}>${NES[m%12]}${Math.floor(m/12)-1} (${NEN[m%12]}${Math.floor(m/12)-1})</option>`).join('');}
   $('#iOct').textContent=PR.oct;$('#iGrid').value=PR.grid;
   $('#iRec').textContent=nrec?'⏹ Terminar grabación':'● Grabar lo que toco';$('#iRec').classList.toggle('rec-on',!!nrec);
-  buildKbd();prRender();
+  buildKbd();prRender();fillA2N();
 }
 $('#iCh').onchange=e=>{PR.ch=+e.target.value;PR.sel=null;renderInst();};
 $('#iSrc').onchange=e=>{const c=S.ch[PR.ch];c.src=e.target.value;c.pat=DEFPAT[c.src]||'';if(c.src!=='audio')c.arm=false;
@@ -1102,6 +1117,90 @@ function confirmBtn(b,txt,fn){if(b.dataset.c!=='1'){const o=b.textContent;b.data
 $('#bNew').onclick=e=>confirmBtn(e.currentTarget,'¿Empezar de cero? ✓',()=>{clearTrack();takes=[];S.ch.forEach(c=>{c.notes=[];c.auto=null;c.edited=false;});
   manual={text:'',lines:null,off:0};try{localStorage.setItem('estudioWillyLetra','');}catch(_){}save();renderTakes();renderInst();renderCanc();draw();
   $('#bNew').textContent='🆕 Tema nuevo';msg('Listo: tema nuevo. La consola y los instrumentos quedaron como estaban.');});
+
+/* =================== Audio → notas → partitura =================== */
+let bpModule=null;
+async function audioToNotes(which,mode,onProg){
+  if(mode==='mel'){const ns=await detectMelody(which);return (ns||[]).map(n=>({t:n.t0,d:Math.max(0.06,n.t1-n.t0),m:n.midi,v:0.85}));}
+  if(!bpModule)bpModule=await import('https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/+esm');
+  const BP=bpModule,src=await monoOf(22050,which);if(!src)return null;
+  const bp=new BP.BasicPitch('https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/model/model.json');
+  const frames=[],onsets=[],contours=[];
+  await bp.evaluateModel(src.data,(f,o,c)=>{frames.push(...f);onsets.push(...o);contours.push(...c);},p=>onProg&&onProg(p));
+  const ev=BP.noteFramesToTime(BP.addPitchBendsToNoteEvents(contours,BP.outputToNotesPoly(frames,onsets,0.3,0.3,7)));
+  return ev.filter(n=>n.durationSeconds>0.05).map(n=>({t:n.startTimeSeconds+src.offset,d:n.durationSeconds,m:n.pitchMidi,v:Math.min(1,0.35+n.amplitude)}));
+}
+function fillA2N(){const s=$('#a2nSrc');if(!s)return;const v=s.value;s.innerHTML=(trackBuf?'<option value="pista">Pista cargada</option>':'')+takes.filter(t=>!t.gen).map(t=>`<option value="${t.id}">Toma: ${esc(t.name)}</option>`).join('');if(v)s.value=v;}
+$('#a2nGo').onclick=async()=>{
+  const which=$('#a2nSrc').value,mode=$('#a2nMode').value;if(!which){msg('Cargá una pista o grabá una toma primero.',true);return;}
+  const c=S.ch[PR.ch];const b=$('#a2nGo');b.disabled=true;
+  try{msg(mode==='mel'?'Detectando la melodía…':'Cargando la IA de notas (la primera vez necesita internet)…');
+    const ns=await audioToNotes(which,mode,p=>{msg('Pasando el audio a notas… '+Math.round(p*100)+'%');});
+    if(!ns||!ns.length){msg('No se detectaron notas claras en ese audio.',true);return;}
+    if(!isInst(PR.ch)){c.src='piano';c.pat='';c.arm=false;if(/^(Canal \d+|Mic 2|Voz|Guitarra)$/.test(c.name))c.name='Partitura';}
+    c.notes=ns;c.edited=true;c.auto=null;save();renderDesk();applyAll();await renderInstrument(PR.ch,true);renderInst();
+    if(ns.length){const lo=Math.min(...ns.map(n=>n.m)),hi=Math.max(...ns.map(n=>n.m));PR.lo=Math.max(21,Math.min(108-PR.rows+1,Math.round((lo+hi)/2-PR.rows/2)));PR.x0=Math.max(0,Math.min(...ns.map(n=>n.t))-0.5);prRender();}
+    msg('Listo: '+ns.length+' notas en "'+c.name+'". Escuchalas, corregilas en el editor y tocá "📜 Ver partitura".');
+  }catch(err){console.error(err);msg('No se pudo pasar a notas'+(mode==='poly'?' (¿hay conexión a internet?)':'')+'.',true);}
+  finally{b.disabled=false;}
+};
+// ---- notas → ABC (pentagrama) ----
+const MAJ_FIFTHS={0:0,7:1,2:2,9:3,4:4,11:5,6:6,1:-5,8:-4,3:-3,10:-2,5:-1};
+const MAJ_NAME={0:'C',7:'G',2:'D',9:'A',4:'E',11:'B',6:'F#',1:'Db',8:'Ab',3:'Eb',10:'Bb',5:'F'};
+const MIN_NAME={9:'Am',4:'Em',11:'Bm',6:'F#m',1:'C#m',8:'G#m',3:'Ebm',10:'Bbm',5:'Fm',0:'Cm',7:'Gm',2:'Dm'};
+const LET=['C','D','E','F','G','A','B'],NAT=[0,2,4,5,7,9,11];
+function keySig(k){const s={};LET.forEach(l=>s[l]=0);'FCGDAEB'.slice(0,Math.max(0,k)).split('').forEach(l=>{if(l)s[l]=1;});'BEADGCF'.slice(0,Math.max(0,-k)).split('').forEach(l=>{if(l)s[l]=-1;});return s;}
+function spell(m,sig,k){const pc=md(m);
+  for(let i=0;i<7;i++)if(md(NAT[i]+sig[LET[i]])===pc)return {L:LET[i],a:sig[LET[i]],o:Math.floor((m-sig[LET[i]])/12)-1};
+  for(let i=0;i<7;i++)if(NAT[i]===pc)return {L:LET[i],a:0,o:Math.floor(m/12)-1};
+  for(let i=0;i<7;i++){const a=k>=0?1:-1;if(md(NAT[i]+a)===pc)return {L:LET[i],a,o:Math.floor((m-a)/12)-1};}
+  return {L:'C',a:0,o:4};}
+function notesToABC(notes,title){
+  const bpm=S.g.bpm>0?S.g.bpm:120,meter=S.g.meter||'4/4',six=meter==='6/8',u=six?60/bpm/6:60/bpm/4,bar=meter==='4/4'?16:12;
+  const ns=notes.slice().sort((a,b)=>a.t-b.t);if(!ns.length)return null;
+  let b0=S.g.bpm>0?S.g.beat0:ns[0].t;while(b0>ns[0].t+1e-3)b0-=bar*u;
+  let kroot=0,minor=false;if(KEY){kroot=md(KEY.root);minor=KEY.minor;}
+  const k=MAJ_FIFTHS[minor?md(kroot+3):kroot],sig=keySig(k),K=minor?MIN_NAME[kroot]:MAJ_NAME[kroot];
+  const PIECES=[16,12,8,6,4,3,2,1],split=n=>{const r=[];while(n>0){const p=PIECES.find(x=>x<=n);r.push(p);n-=p;}return r;};
+  const chordAtU=uu=>{const t=b0+uu*u,ci=chordAt(t+0.01),c=chordSegs[ci];return c&&c.q!=='N'?NEN[md(c.root)]+SUF[c.q]:null;};
+  const endU=Math.ceil(Math.max(...ns.map(n=>Math.round((n.t+n.d-b0)/u)))/bar)*bar;
+  function voice(list,withChords){
+    const ev=[];list.forEach(n=>{const s=Math.round((n.t-b0)/u),e=Math.max(s+1,Math.round((n.t+n.d-b0)/u));const l=ev.find(x=>x.s===s);if(l){l.ms.push(n.m);l.e=Math.max(l.e,e);}else ev.push({s,e,ms:[n.m]});});
+    ev.sort((a,b)=>a.s-b.s);for(let i=0;i<ev.length-1;i++)ev[i].e=Math.min(ev[i].e,ev[i+1].s);
+    let out='',pos=0,barState={},lastChord=null,bars=0;
+    const pitchStr=m=>{const sp=spell(m,sig,k),key=sp.L+sp.o,cur=barState[key]??sig[sp.L];let acc='';if(sp.a!==cur){acc=sp.a===1?'^':sp.a===-1?'_':'=';barState[key]=sp.a;}
+      let L=sp.o>=5?sp.L.toLowerCase():sp.L;if(sp.o>=6)L+="'".repeat(sp.o-5);if(sp.o<=3)L+=','.repeat(4-sp.o);return acc+L;};
+    const emit=(len,ms,isRest)=>{while(len>0){const room=bar-(pos%bar),take=Math.min(len,room),parts=split(take);
+        parts.forEach((p,j)=>{if(withChords){const ch=chordAtU(pos);if(ch&&ch!==lastChord){out+='"'+ch+'"';lastChord=ch;}}
+          out+=(isRest?'z':(ms.length>1?'['+ms.map(pitchStr).join('')+']':pitchStr(ms[0])))+(p===1?'':p);
+          if(!isRest&&((j<parts.length-1)||(len-take>0)))out+='-';out+=' ';pos+=p;});
+        len-=take;if(pos%bar===0){out+='| ';barState={};bars++;if(bars%4===0)out+='\n';}}};
+    ev.forEach(e=>{if(e.s>pos)emit(e.s-pos,null,true);if(e.e>e.s&&e.s>=pos)emit(e.e-e.s,e.ms.slice().sort((a,b)=>a-b),false);});
+    if(pos<endU)emit(endU-pos,null,true);
+    return out.trim().replace(/\|\s*$/,'|]');
+  }
+  const head='X:1\nT:'+(title||'Partitura').replace(/\n/g,' ')+'\nM:'+meter+'\nL:1/16\nQ:'+(six?'3/8':'1/4')+'='+Math.round(bpm)+'\n';
+  const lo=Math.min(...ns.map(n=>n.m)),hi=Math.max(...ns.map(n=>n.m)),avg=ns.reduce((a,n)=>a+n.m,0)/ns.length;
+  if(lo<55&&hi>62){ // piano: dos pentagramas
+    const up=ns.filter(n=>n.m>=60),dn=ns.filter(n=>n.m<60);
+    return head+'%%score {1 2}\nK:'+K+'\nV:1 clef=treble\n'+voice(up,true)+'\nV:2 clef=bass\n'+voice(dn,false)+'\n';}
+  return head+'K:'+K+(avg<55?' clef=bass':'')+'\n'+voice(ns,true)+'\n';
+}
+let abcLoading=null;
+function loadABCJS(){if(window.ABCJS)return Promise.resolve();if(!abcLoading)abcLoading=new Promise((res,rej)=>{const s=document.createElement('script');
+  s.src='abcjs-basic-min.js';s.onload=res;s.onerror=()=>{const t=document.createElement('script');t.src='https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js';t.onload=res;t.onerror=rej;document.head.appendChild(t);};document.head.appendChild(s);});return abcLoading;}
+let lastABC='';
+$('#iScore').onclick=async()=>{
+  const ns=chNotes();if(!ns.length){msg('Este canal no tiene notas: tocá, importá MIDI o pasá un audio a notas.',true);return;}
+  if(!(S.g.bpm>0))msg('Sin tempo cargado: la partitura usa 120 BPM. Detectá o marcá el tempo arriba para que los compases queden bien.');
+  const title=((trackName||'').replace(/\.[^.]+$/,'')||'Tema')+' — '+S.ch[PR.ch].name;
+  lastABC=notesToABC(ns,title);$('#scoreBox').hidden=false;
+  try{await loadABCJS();ABCJS.renderAbc('scoreOut',lastABC,{responsive:'resize',add_classes:true,paddingtop:10,paddingbottom:10});$('#scoreBox').scrollIntoView({behavior:'smooth'});}
+  catch(e){$('#scoreOut').innerHTML='<pre class="tab">'+esc(lastABC)+'</pre><div class="hint">No se pudo cargar el dibujador de partituras (¿sin internet?). Arriba está la partitura en formato ABC.</div>';}
+};
+$('#scorePrint').onclick=()=>{document.body.classList.add('print-score');setTimeout(()=>{window.print();setTimeout(()=>document.body.classList.remove('print-score'),500);},50);};
+$('#scoreAbc').onclick=()=>downloadTxt((S.ch[PR.ch].name||'partitura')+'.abc',lastABC);
+$('#scoreClose').onclick=()=>{$('#scoreBox').hidden=true;};
 
 /* =================== Transporte =================== */
 const totalDur=()=>Math.max(trackBuf?trackBuf.duration:0,...takes.map(t=>t.start+t.buf.duration),0);

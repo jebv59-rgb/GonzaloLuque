@@ -1,6 +1,6 @@
 // Estudio Willy: permite usar la app sin internet (por ejemplo, en el escenario).
-const CACHE = 'estudio-willy-v7';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'estudio-willy-v8';
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './abcjs-basic-min.js'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
