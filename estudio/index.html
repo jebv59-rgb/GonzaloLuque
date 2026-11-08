@@ -250,6 +250,8 @@ textarea#lyrTxt{width:100%;background:#06080a;color:#e9ecef;border:2px solid #05
         <button id="bInputs" class="small">🎤 Activar entradas</button>
         <button id="bAddCh" class="small">+ Canal</button>
         <button id="bDelCh" class="small">− Canal</button>
+        <label class="file"><input type="file" id="fStems" accept="audio/*,video/*" multiple><button class="small" onclick="this.previousElementSibling.click()" title="Elegí varios archivos: cada uno va a su propio canal">📂 Cargar pistas separadas</button></label>
+        <input type="file" id="fChan" accept="audio/*,video/*" multiple style="display:none">
       </div>
       <div class="strips" id="strips"></div>
       <p class="hint">Armá con <b>● REC</b> los canales que querés grabar: se graban todos juntos. Con una interfaz de 2 entradas elegí "Entrada 1" y "Entrada 2" en cada canal (ej. voz y guitarra a la vez). Usá auriculares.</p>
@@ -369,9 +371,9 @@ const CH_PRESETS={
   'Bombo / percusión':{hp:40,eq:[3,-2,-1,2,1],compOn:true,thr:-14,ratio:4,rev:0.1,dly:0},
   'Seca (sin efectos)':{hp:20,eq:[0,0,0,0,0],compOn:false,rev:0,dly:0}
 };
-const COLORS=['#5ab0ff','#47d18c','#ff9a3d','#c792ea','#ffd24a','#ff6b8b','#4fd1c5','#e9ecef'];
+const COLORS=['#5ab0ff','#47d18c','#ff9a3d','#c792ea','#ffd24a','#ff6b8b','#4fd1c5','#e9ecef','#9be15d','#f78fb3','#70a1ff','#eccc68'];
 const CH_TEMPLATES=[{name:'Voz',preset:'Voz natural'},{name:'Mic 2',preset:'Voz natural'},{name:'Guitarra',preset:'Guitarra criolla'},{name:'Piano',preset:'Piano / teclado'}];
-const MAXCH=8;
+const MAXCH=12;
 function newCh(i,t){
   t=t||{};
   const c={name:t.name||('Canal '+(i+1)),color:COLORS[i%COLORS.length],preset:t.preset||'Seca (sin efectos)',
@@ -532,6 +534,7 @@ function stripCh(i){
   return `<div class="strip" style="--cc:${c.color}">
     <div class="cbar"></div>
     <div class="sname"><input type="text" value="${esc(c.name)}" data-name="${i}" title="Clic para renombrar"></div>
+    <button class="small" data-load="${i}" style="width:100%" title="Cargar un archivo de audio en este canal">📂 Cargar audio</button>
     <select data-preset="${i}" title="Preset del canal">${preOpts}</select>
     <select data-dev="${i}" title="Dispositivo de entrada">${devOpts}</select>
     <select data-inp="${i}" title="Entrada de la interfaz">${inpOpts}</select>
@@ -578,6 +581,7 @@ function renderDesk(){
     <div class="cbar"></div><div class="sname"><input type="text" value="MAIN MIX" disabled></div>
     <div class="sec">EXPORTAR WAV</div>
     <div class="mini"><button id="bExpMix" class="small">⬇ Mezcla</button><button id="bExpCh" class="small" title="Todos los canales con efectos, sin la pista">⬇ Sin pista</button><button id="bExpSeca" class="small" title="Tomas del canal 1 sin efectos (para entrenar tu modelo de voz)">⬇ Voz seca</button></div>
+    <div class="sec">PISTA</div><div class="mini"><button id="bBounce" class="small" title="Convierte la mezcla de todos los canales en la PISTA (para el escenario y el repertorio)">⤵ Mezcla → Pista</button></div>
     <div style="flex:1"></div>
     ${fader(g+'masterVol','fvM',1.5,'<div class="led" id="fvML2"></div>')}
   </div>`;
@@ -588,8 +592,9 @@ function renderDesk(){
   el.querySelectorAll('[data-dev],[data-inp]').forEach(x=>x.addEventListener('change',async()=>{const i=+(x.dataset.dev??x.dataset.inp);
     if(x.dataset.dev!==undefined)S.ch[i].dev=x.value;else S.ch[i].inp=x.value;save();
     if(inputsOn){try{await connectInput(i);msg('Entrada del canal '+S.ch[i].name+' cambiada.');}catch(e){msg('No pude abrir esa entrada.',true);}}}));
+  el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{chanTarget=+b.dataset.load;$('#fChan').click();});
   $('#fTrack').onchange=loadTrack;
-  $('#bExpMix').onclick=()=>render('mix');$('#bExpCh').onclick=()=>render('canales');$('#bExpSeca').onclick=()=>render('seca');
+  $('#bExpMix').onclick=()=>render('mix');$('#bBounce').onclick=bounceToTrack;$('#bExpCh').onclick=()=>render('canales');$('#bExpSeca').onclick=()=>render('seca');
   syncUI();fillChSelects();
 }
 function fillChSelects(){
@@ -624,6 +629,36 @@ $('#fVoice').onchange=async e=>{
   catch(err){msg('No se pudo leer el archivo.',true);}
   e.target.value='';
 };
+
+let chanTarget=0;
+const STEM_GUESS=[[/voz|vocal|voice|canto|coro/i,'Voz natural','Voz'],[/guit|gtr/i,'Guitarra acústica','Guitarra'],[/piano|tecl|key|synth/i,'Piano / teclado','Piano'],
+  [/bater|drum|bombo|perc|caja|leg[uü]ero/i,'Bombo / percusión','Percusión'],[/bajo|bass/i,'Seca (sin efectos)','Bajo'],[/other|otros|resto/i,'Seca (sin efectos)','Otros'],[/instrument|no_vocals|pista|karaoke/i,'Seca (sin efectos)','Instrumental']];
+function applyGuess(i,fname){const g=STEM_GUESS.find(([re])=>re.test(fname));const c=S.ch[i];
+  c.name=(g?g[2]:fname.replace(/\.[^.]+$/,'')).slice(0,14);if(g){const p=CH_PRESETS[g[1]];c.preset=g[1];Object.keys(p).forEach(k=>c[k]=Array.isArray(p[k])?p[k].slice():p[k]);}c.arm=false;}
+async function loadIntoChannel(i,files){
+  let n=0;for(const f of files){let ch=i;
+    if(n>0){ch=S.ch.findIndex((c,k)=>k>i&&!takes.some(t=>t.ch===k));if(ch<0){if(S.ch.length>=MAXCH){msg('Máximo '+MAXCH+' canales.',true);break;}S.ch.push(newCh(S.ch.length));ch=S.ch.length-1;syncChains();}applyGuess(ch,f.name);}
+    try{const b=await decodeFile(f);addTake(ch,b,0,f.name.replace(/\.[^.]+$/,''));n++;}catch(e){msg('No se pudo leer '+f.name,true);}}
+  renderDesk();applyAll();renderTakes();if(n)msg(n===1?'Audio cargado en '+S.ch[i].name+'.':n+' audios cargados en canales.');
+  if(n&&!trackBuf&&!KEY)analyzeKey();
+}
+$('#fChan').onchange=async e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)await loadIntoChannel(chanTarget,fs);};
+$('#fStems').onchange=async e=>{
+  const fs=[...e.target.files];e.target.value='';if(!fs.length)return;initCtx();msg('Cargando '+fs.length+' pistas…');let n=0;
+  for(const f of fs){let ch=S.ch.findIndex((c,k)=>!takes.some(t=>t.ch===k));
+    if(ch<0){if(S.ch.length>=MAXCH){msg('Máximo '+MAXCH+' canales: algunas pistas no entraron.',true);break;}S.ch.push(newCh(S.ch.length));ch=S.ch.length-1;syncChains();}
+    applyGuess(ch,f.name);try{const b=await decodeFile(f);addTake(ch,b,0,f.name.replace(/\.[^.]+$/,''));n++;}catch(err){msg('No se pudo leer '+f.name,true);}}
+  renderDesk();applyAll();renderTakes();msg(n+' pistas cargadas, una por canal. Mezclalas con los faders; con "⤵ Mezcla → Pista" las pasás al escenario.');
+  if(n&&!trackBuf)analyzeKey();
+};
+async function bounceToTrack(){
+  const out=await renderBuffer('mix');if(!out)return;
+  const base=(trackName||'Tema').replace(/\.[^.]+$/,'').replace(/ \(mezcla\)$/,''),f=new File([toWav(out)],base+' (mezcla).wav',{type:'audio/wav'});
+  stop();trackBuf=out;trackTrim=0;trackName=f.name;setTrackFile(f);currentSongId=null;pos=0;S.g.karaoke=false;
+  takes.forEach(t=>t.on=false);renderTakes();renderSetlist();$('#trackName').textContent=f.name+' · '+fmtS(out.duration);peaksCache.clear();applyAll();draw();
+  msg('La mezcla ahora es la PISTA (las tomas quedaron apagadas para que no suenen dos veces). Ya la podés usar en el escenario o guardarla en el repertorio.');
+  if(!KEY)analyzeKey();
+}
 
 /* =================== Transporte =================== */
 const totalDur=()=>Math.max(trackBuf?trackBuf.duration:0,...takes.map(t=>t.start+t.buf.duration),0);
@@ -702,11 +737,13 @@ function renderTakes(){
 }
 
 /* =================== Exportar =================== */
-async function render(kind){
+async function render(kind){const out=await renderBuffer(kind);if(!out)return;const base=(trackName||'grabacion').replace(/\.[^.]+$/,'');
+  download(toWav(out),base+({mix:' - mezcla',canales:' - canales sin pista',seca:' - voz sin efectos'}[kind])+'.wav');msg('Listo, archivo descargado.');}
+async function renderBuffer(kind){
   const on=takes.filter(t=>t.on&&S.ch[t.ch]);
-  if(kind==='seca'&&!on.some(t=>t.ch===0)){msg('No hay tomas activas en el canal 1.',true);return;}
-  if(kind==='canales'&&!on.length){msg('No hay tomas activas.',true);return;}
-  if(kind==='mix'&&!trackBuf&&!on.length){msg('No hay nada para exportar.',true);return;}
+  if(kind==='seca'&&!on.some(t=>t.ch===0)){msg('No hay tomas activas en el canal 1.',true);return null;}
+  if(kind==='canales'&&!on.length){msg('No hay tomas activas.',true);return null;}
+  if(kind==='mix'&&!trackBuf&&!on.length){msg('No hay nada para exportar.',true);return null;}
   initCtx();msg('Exportando…');
   const sr=ctx.sampleRate,tail=kind==='seca'?0.1:S.g.revSize+(S.g.dlyFb>0?3:0.5);
   const oc=new OfflineAudioContext(2,Math.ceil((totalDur()+tail)*sr),sr);
@@ -715,8 +752,7 @@ async function render(kind){
   if(kind==='seca'){on.filter(t=>t.ch===0).forEach(tk=>{const s=oc.createBufferSource();s.buffer=tk.buf;s.connect(m.g);s.start(tk.start);});}
   else{const b=buildBus(oc,m.g);setBus(b,oc);const cs=S.ch.map((c,i)=>{const n=buildCh(oc,b,m.g);setCh(n,oc,c);return n;});
     on.forEach(tk=>{const s=oc.createBufferSource();s.buffer=tk.buf;s.connect(cs[tk.ch].input);s.start(tk.start);});}
-  const out=await oc.startRendering(),base=(trackName||'grabacion').replace(/\.[^.]+$/,'');
-  download(toWav(out),base+({mix:' - mezcla',canales:' - canales sin pista',seca:' - voz sin efectos'}[kind])+'.wav');msg('Listo, archivo descargado.');
+  return await oc.startRendering();
 }
 function toWav(buf){
   const ch=buf.numberOfChannels,len=buf.length,sr=buf.sampleRate,ab=new ArrayBuffer(44+len*ch*2),v=new DataView(ab);let o=0;
