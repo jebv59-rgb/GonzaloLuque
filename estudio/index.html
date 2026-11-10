@@ -2113,17 +2113,17 @@ async function finishCap(chunks,type){
 }
 
 /* =================== Atajos a Colab =================== */
-const COLAB_DEF={nb:'https://colab.research.google.com/drive/13L7G63ypcVzxEa2Z8mlqvP6tBqu5jvpb',canc:'https://drive.google.com/drive/folders/1Rra6PrYa3hIcHYzomOAuS9JVQaV8oKRi',res:'https://drive.google.com/drive/folders/17tkXjgS5cFiC7LV4L_YWDCfDQPt-sFm0'};
+const COLAB_DEF={nb:'https://colab.research.google.com/drive/1o_G-OKdbYuiSsTeuWtJY41EhKAnCYsNq',canc:'https://drive.google.com/drive/folders/1Rra6PrYa3hIcHYzomOAuS9JVQaV8oKRi',res:'https://drive.google.com/drive/folders/17tkXjgS5cFiC7LV4L_YWDCfDQPt-sFm0'};
 let COLAB=Object.assign({},COLAB_DEF);try{Object.assign(COLAB,JSON.parse(localStorage.getItem('estudioWillyColab')||'{}'));}catch(e){}
 const COLAB_CFG={
   sep:[['ENTRENAR','no'],['CONVERTIR_VOZ','desmarcado ☐'],['TRANSCRIBIR_LETRA','desmarcado ☐'],['SEPARAR_INSTRUMENTOS','6 pistas']],
   letra:[['ENTRENAR','no'],['CONVERTIR_VOZ','desmarcado ☐'],['TRANSCRIBIR_LETRA','marcado ☑'],['SEPARAR_INSTRUMENTOS','6 pistas']],
-  voz:[['ENTRENAR','auto (la primera vez entrena 1–3 h con tu voz de "dataset_mi_voz")'],['CONVERTIR_VOZ','marcado ☑'],['TONO','0 (o -12 si la canta una mujer)'],['SEPARAR_INSTRUMENTOS','el que quieras']]};
+  voz:[['ENTRENAR','auto (la primera vez entrena 1–3 h con tu voz de "dataset_mi_voz")'],['LIMPIAR_DATASET','marcado ☑ (saca la música si subiste canciones tuyas)'],['CONVERTIR_VOZ','marcado ☑'],['TONO','0 (o -12 si la canta una mujer)'],['SEPARAR_INSTRUMENTOS','el que quieras']]};
 function renderColab(){
   $('#lkNb').href=COLAB.nb;$('#lkCanc').href=COLAB.canc;$('#lkRes').href=COLAB.res;
   $('#cfgNb').value=COLAB.nb;$('#cfgCanc').value=COLAB.canc;$('#cfgRes').value=COLAB.res;
   $('#colabCfg').innerHTML=COLAB_CFG[$('#colabMode').value].map(([k,v])=>'<div><code>'+k+'</code> → <b>'+esc(v)+'</b></div>').join('')+
-    ($('#colabMode').value==='voz'?'<div class="hint">Antes: subí 10–30 min de tu voz sin efectos (botón ⬇ Voz seca) a la carpeta <code>dataset_mi_voz</code>.</div>':'');
+    ($('#colabMode').value==='voz'?'<div class="hint">Antes: subí a la carpeta <code>dataset_mi_voz</code> 10–30 min de tu voz: tu voz sola (⬇ Voz seca) o canciones cantadas por vos, aunque tengan música (solo vos, sin coros).</div>':'');
 }
 $('#colabMode').onchange=renderColab;
 ['Nb','Canc','Res'].forEach(k=>$('#cfg'+k).onchange=e=>{COLAB[k.toLowerCase()]=e.target.value.trim()||COLAB_DEF[k.toLowerCase()];try{localStorage.setItem('estudioWillyColab',JSON.stringify(COLAB));}catch(_){}renderColab();});
